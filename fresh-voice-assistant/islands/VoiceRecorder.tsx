@@ -29,10 +29,11 @@ export default function VoiceRecorder(): JSX.Element {
   const [vad, setVad] = useState<VoiceActivityDetector | null>(null);
   const [isVadEnabled, setIsVadEnabled] = useState(false);
   const [currentVolume, setCurrentVolume] = useState(0);
-  const [vadSensitivity, setVadSensitivity] = useState(30);
+  const [vadSensitivity, setVadSensitivity] = useState(40); // Increased default for better noise rejection
   const [stream, setStream] = useState<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const volumeIntervalRef = useRef<number | null>(null);
+  const recordingStartTime = useRef<number | null>(null);
 
   // Check microphone permissions on component mount
   useEffect(() => {
@@ -108,23 +109,25 @@ export default function VoiceRecorder(): JSX.Element {
 
       setStream(micStream);
 
-      // Create VAD instance
+      // Create VAD instance with improved settings
       const vadInstance = new VoiceActivityDetector(
         audioContext!,
         () => {
           if (!isRecording.value && !isProcessing.value) {
+            console.log("🎙️ VAD: Voice detected, starting recording");
             startRecording();
           }
         },
         () => {
           if (isRecording.value && !isProcessing.value) {
+            console.log("🎙️ VAD: Voice ended, stopping recording");
             stopRecording();
           }
         },
         {
           voiceThreshold: vadSensitivity,
           silenceDelay: 1500,
-          minSpeechDuration: 300,
+          minSpeechDuration: 500, // Increased from 300ms to 500ms
         },
       );
 
@@ -206,21 +209,30 @@ export default function VoiceRecorder(): JSX.Element {
       const chunks: Blob[] = [];
 
       recorder.ondataavailable = (event) => {
-        chunks.push(event.data);
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+          console.log(`📼 Received chunk: ${event.data.size} bytes`);
+        } else {
+          console.log("⚠️ Received empty data chunk");
+        }
       };
 
       recorder.onstop = () => {
-        processRecording(chunks);
-        // Only stop tracks if not using VAD
-        if (!isVadEnabled) {
-          recordingStream!.getTracks().forEach((track) => track.stop());
-        }
+        // Add a delay to ensure all chunks are collected
+        setTimeout(() => {
+          processRecording(chunks);
+          // Only stop tracks if not using VAD
+          if (!isVadEnabled) {
+            recordingStream!.getTracks().forEach((track) => track.stop());
+          }
+        }, 100); // 100ms delay to collect final chunks
       };
 
       recorder.start();
       setMediaRecorder(recorder);
       setAudioChunks(chunks);
       isRecording.value = true;
+      recordingStartTime.current = Date.now();
       updateStatus(
         isVadEnabled
           ? "🔴 Recording voice..."
@@ -234,8 +246,24 @@ export default function VoiceRecorder(): JSX.Element {
 
   function stopRecording() {
     if (mediaRecorder && isRecording.value) {
+      // Check minimum recording duration
+      const recordingDuration = recordingStartTime.current
+        ? Date.now() - recordingStartTime.current
+        : 0;
+
+      const MIN_RECORDING_DURATION = 500; // 500ms minimum
+
+      if (recordingDuration < MIN_RECORDING_DURATION && !isVadEnabled) {
+        // For manual recording, warn about short duration
+        console.log(`⚠️ Recording too short: ${recordingDuration}ms`);
+        updateStatus("⚠️ Recording too short - please hold longer");
+        // Continue recording
+        return;
+      }
+
       mediaRecorder.stop();
       isRecording.value = false;
+      recordingStartTime.current = null;
       updateStatus(
         isVadEnabled
           ? "🎙️ Auto-detect ON - Waiting..."
@@ -245,6 +273,39 @@ export default function VoiceRecorder(): JSX.Element {
   }
 
   async function processRecording(chunks: Blob[]) {
+    // Validate chunks before processing
+    if (!chunks || chunks.length === 0) {
+      console.log("⚠️ No audio chunks received");
+      updateStatus("⚠️ No audio recorded");
+      isProcessing.value = false;
+      isRecording.value = false;
+      if (isVadEnabled) {
+        updateStatus("🎙️ Auto-detect ON - Start speaking...");
+      }
+      return;
+    }
+
+    // Check total size of audio data
+    const totalSize = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+    console.log(
+      `📊 Total audio size: ${totalSize} bytes from ${chunks.length} chunks`,
+    );
+
+    // Minimum size threshold (e.g., 1KB for meaningful audio)
+    const MIN_AUDIO_SIZE = 1024;
+    if (totalSize < MIN_AUDIO_SIZE) {
+      console.log(
+        `⚠️ Audio too small: ${totalSize} bytes < ${MIN_AUDIO_SIZE} bytes`,
+      );
+      updateStatus("⚠️ Audio too short - please speak longer");
+      isProcessing.value = false;
+      isRecording.value = false;
+      if (isVadEnabled) {
+        updateStatus("🎙️ Auto-detect ON - Start speaking...");
+      }
+      return;
+    }
+
     isProcessing.value = true;
     updateStatus("🎯 Processing speech...");
 
@@ -813,8 +874,8 @@ export default function VoiceRecorder(): JSX.Element {
               <span>Sensitivity:</span>
               <input
                 type="range"
-                min="10"
-                max="100"
+                min="20"
+                max="80"
                 value={vadSensitivity}
                 onChange={(e) => {
                   const newValue = parseInt(e.currentTarget.value);

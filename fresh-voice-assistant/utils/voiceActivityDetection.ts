@@ -173,13 +173,21 @@ export class VoiceActivityDetector {
     // Prevent rapid start after end (cooldown period)
     const timeSinceLastEnd = Date.now() - this.lastVoiceEndTime;
     if (timeSinceLastEnd < 1000) { // Increased cooldown to 1 second
+      console.log("🚫 Voice start blocked - too soon after last end");
       return;
     }
 
     this.isSpeaking = true;
     this.speechStartTime = Date.now();
     console.log("✅ Voice started at", new Date().toLocaleTimeString());
-    this.voiceStartCallback();
+
+    // Don't trigger callback immediately - wait a bit to confirm it's real speech
+    setTimeout(() => {
+      if (this.isSpeaking) {
+        console.log("🎙️ Confirmed voice activity - triggering callback");
+        this.voiceStartCallback();
+      }
+    }, 100); // 100ms delay to confirm voice
 
     // Clear any existing silence timeout
     if (this.silenceTimeout) {
@@ -199,11 +207,21 @@ export class VoiceActivityDetector {
         ) {
           this.isSpeaking = false;
           this.lastVoiceEndTime = Date.now();
-          console.log("✅ Voice ended at", new Date().toLocaleTimeString());
+          const duration = Date.now() - this.speechStartTime;
+          console.log(
+            `✅ Voice ended at ${
+              new Date().toLocaleTimeString()
+            } (duration: ${duration}ms)`,
+          );
           this.voiceEndCallback();
         } else {
           // Too short, ignore it
-          console.log("🚫 Speech too short, ignoring");
+          const duration = this.speechStartTime
+            ? Date.now() - this.speechStartTime
+            : 0;
+          console.log(
+            `🚫 Speech too short (${duration}ms < ${this.config.minSpeechDuration}ms), ignoring`,
+          );
           this.isSpeaking = false;
         }
         this.silenceTimeout = null;

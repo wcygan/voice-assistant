@@ -90,6 +90,19 @@ async function processVoiceRequest(
     `${YELLOW}📥 Received voice request: audio length=${audio.length}, model=${model}${RESET}`,
   );
 
+  // Validate audio data
+  if (!audio || audio.length === 0) {
+    log(`${RED}❌ Empty audio data received${RESET}`);
+    throw new Error("No audio data received");
+  }
+
+  // Check minimum base64 length (rough estimate: 1KB audio ~ 1366 chars in base64)
+  const MIN_BASE64_LENGTH = 1000;
+  if (audio.length < MIN_BASE64_LENGTH) {
+    log(`${YELLOW}⚠️ Audio data too small: ${audio.length} chars${RESET}`);
+    throw new Error("Audio recording too short - please speak longer");
+  }
+
   try {
     // Create temporary directory
     const tempDir = `temp_fresh_${Date.now()}`;
@@ -101,15 +114,36 @@ async function processVoiceRequest(
     const inputPath = `${tempDir}/input.wav`;
     await Deno.writeFile(webmPath, audioData);
 
+    // Check if WebM file was written successfully and has content
+    const webmFileInfo = await Deno.stat(webmPath);
+    log(`${CYAN}WebM file size: ${webmFileInfo.size} bytes${RESET}`);
+
+    if (webmFileInfo.size === 0) {
+      log(`${RED}❌ Empty WebM file created${RESET}`);
+      throw new Error("Empty audio file - no audio data recorded");
+    }
+
     log(`${CYAN}🔄 Converting WebM to WAV...${RESET}`);
-    // Convert WebM to WAV using FFmpeg
+    // Convert WebM to WAV using FFmpeg with error capturing
     const convertResult =
-      await $`ffmpeg -i ${webmPath} -ar 16000 -ac 1 -c:a pcm_s16le ${inputPath}`
+      await $`ffmpeg -i ${webmPath} -ar 16000 -ac 1 -c:a pcm_s16le ${inputPath} 2>&1`
         .noThrow();
 
     if (!convertResult || !await $`test -f ${inputPath}`.noThrow()) {
       log(`${RED}❌ Audio conversion failed${RESET}`);
-      throw new Error("Audio conversion failed");
+      if (convertResult) {
+        log(`${RED}FFmpeg output: ${convertResult}${RESET}`);
+      }
+      throw new Error("Audio conversion failed - invalid audio format");
+    }
+
+    // Check converted WAV file size
+    const wavFileInfo = await Deno.stat(inputPath);
+    log(`${CYAN}WAV file size: ${wavFileInfo.size} bytes${RESET}`);
+
+    if (wavFileInfo.size < 1024) { // Less than 1KB is too small for meaningful audio
+      log(`${RED}❌ WAV file too small: ${wavFileInfo.size} bytes${RESET}`);
+      throw new Error("Audio file too small - please speak longer");
     }
 
     log(`${YELLOW}🎯 Processing voice request...${RESET}`);
