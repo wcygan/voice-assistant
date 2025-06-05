@@ -35,6 +35,7 @@ export default function VoiceRecorder(): JSX.Element {
   const audioRef = useRef<HTMLAudioElement>(null);
   const volumeIntervalRef = useRef<number | null>(null);
   const recordingStartTime = useRef<number | null>(null);
+  const isRecorderActive = useRef<boolean>(false); // Track if current recorder should accept chunks
 
   // Check microphone permissions on component mount
   useEffect(() => {
@@ -172,6 +173,7 @@ export default function VoiceRecorder(): JSX.Element {
     setIsVadEnabled(false);
     setIsVadListening(false);
     setCurrentVolume(0);
+    isRecorderActive.current = false; // Stop any ongoing recording chunks
     updateStatus("🎙️ Auto-detect OFF");
   }
 
@@ -182,10 +184,13 @@ export default function VoiceRecorder(): JSX.Element {
         console.log("⚠️ Already recording or processing, skipping start");
         return;
       }
-      
+
       // Stop any existing recorder first
       if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        console.log("⚠️ Stopping existing MediaRecorder before starting new one");
+        console.log(
+          "⚠️ Stopping existing MediaRecorder before starting new one",
+        );
+        isRecorderActive.current = false; // Disable chunk processing for old recorder
         mediaRecorder.stop();
         setMediaRecorder(null);
       }
@@ -239,15 +244,17 @@ export default function VoiceRecorder(): JSX.Element {
       });
 
       const chunks: Blob[] = [];
-      let isRecorderActive = true;
+
+      // Mark this recorder as active at the component level
+      isRecorderActive.current = true;
 
       recorder.ondataavailable = (event) => {
-        // Only process chunks if recorder is still active
-        if (!isRecorderActive) {
+        // Only process chunks if this recorder is still active
+        if (!isRecorderActive.current) {
           console.log("⚠️ Ignoring chunk after recorder stopped");
           return;
         }
-        
+
         if (event.data && event.data.size > 0) {
           chunks.push(event.data);
           console.log(`📼 Received chunk: ${event.data.size} bytes`);
@@ -257,7 +264,7 @@ export default function VoiceRecorder(): JSX.Element {
       };
 
       recorder.onstop = () => {
-        isRecorderActive = false; // Stop accepting new chunks
+        isRecorderActive.current = false; // Stop accepting new chunks
         console.log(`📼 Recording stopped. Total chunks: ${chunks.length}`);
         // Add a delay to ensure all chunks are collected
         setTimeout(() => {
@@ -1007,7 +1014,8 @@ export default function VoiceRecorder(): JSX.Element {
         {audioResponse.value && (
           <button
             type="button"
-            onClick={() => playAudioResponse(audioResponse.value)}
+            onClick={() =>
+              audioResponse.value && playAudioResponse(audioResponse.value)}
             style={{
               padding: "8px 16px",
               backgroundColor: "#4CAF50",

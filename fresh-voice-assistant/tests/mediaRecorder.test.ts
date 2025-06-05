@@ -1,14 +1,17 @@
 /// <reference lib="dom" />
 
-import { assertEquals, assertExists } from "https://deno.land/std@0.213.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertExists,
+} from "https://deno.land/std@0.213.0/assert/mod.ts";
 
 // Mock MediaStream if not available
-if (typeof MediaStream === 'undefined') {
+if (typeof MediaStream === "undefined") {
   // @ts-ignore - Mocking for tests
   globalThis.MediaStream = class MockMediaStream {
     id = crypto.randomUUID();
     active = true;
-    
+
     getAudioTracks() {
       return [{
         kind: "audio",
@@ -19,7 +22,7 @@ if (typeof MediaStream === 'undefined') {
         stop: () => {},
       }];
     }
-    
+
     getTracks() {
       return this.getAudioTracks();
     }
@@ -45,10 +48,10 @@ class MockMediaRecorder {
     if (this.state !== "inactive") {
       throw new Error("InvalidStateError");
     }
-    
+
     this.state = "recording";
     this.chunks = [];
-    
+
     if (this.onstart) {
       this.onstart();
     }
@@ -69,7 +72,7 @@ class MockMediaRecorder {
     }
 
     this.state = "inactive";
-    
+
     if (this.timesliceInterval) {
       clearInterval(this.timesliceInterval);
       this.timesliceInterval = undefined;
@@ -127,19 +130,20 @@ Deno.test("MediaRecorder - cannot start when already recording", () => {
     recorder.start();
   } catch (e) {
     errorThrown = true;
-    assertEquals(e.message, "InvalidStateError");
+    const err = e as Error;
+    assertEquals(err.message, "InvalidStateError");
   }
-  
+
   assertEquals(errorThrown, true);
 });
 
 Deno.test("MediaRecorder - data chunks with timeslice", async () => {
   const mockStream = new MediaStream();
   const recorder = new MockMediaRecorder(mockStream);
-  
+
   const chunks: Blob[] = [];
   let chunkCount = 0;
-  
+
   recorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) {
       chunks.push(event.data);
@@ -149,13 +153,13 @@ Deno.test("MediaRecorder - data chunks with timeslice", async () => {
 
   // Start with 100ms timeslice
   recorder.start(100);
-  
+
   // Wait for some chunks
-  await new Promise(resolve => setTimeout(resolve, 350));
-  
+  await new Promise((resolve) => setTimeout(resolve, 350));
+
   // Stop recording
   recorder.stop();
-  
+
   // Should have received at least 3 chunks (300ms / 100ms)
   assertEquals(chunkCount >= 3, true);
 });
@@ -163,15 +167,15 @@ Deno.test("MediaRecorder - data chunks with timeslice", async () => {
 Deno.test("MediaRecorder - stop prevents further chunks", async () => {
   const mockStream = new MediaStream();
   const recorder = new MockMediaRecorder(mockStream);
-  
+
   const chunks: Blob[] = [];
   let isRecorderActive = true;
-  
+
   recorder.ondataavailable = (event) => {
     if (!isRecorderActive) {
       throw new Error("Should not receive chunks after stop");
     }
-    
+
     if (event.data && event.data.size > 0) {
       chunks.push(event.data);
     }
@@ -183,16 +187,16 @@ Deno.test("MediaRecorder - stop prevents further chunks", async () => {
 
   // Start recording
   recorder.start(50);
-  
+
   // Wait a bit
-  await new Promise(resolve => setTimeout(resolve, 150));
-  
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
   // Stop recording
   recorder.stop();
-  
+
   // Wait to ensure no more chunks arrive
-  await new Promise(resolve => setTimeout(resolve, 150));
-  
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
   // Test passes if no error was thrown
   assertExists(chunks);
 });
@@ -200,16 +204,16 @@ Deno.test("MediaRecorder - stop prevents further chunks", async () => {
 Deno.test("MediaRecorder - multiple start/stop cycles", () => {
   const mockStream = new MediaStream();
   let recorder = new MockMediaRecorder(mockStream);
-  
+
   // First cycle
   recorder.start();
   assertEquals(recorder.state, "recording");
   recorder.stop();
   assertEquals(recorder.state, "inactive");
-  
+
   // Create new recorder for second cycle (simulating cleanup)
   recorder = new MockMediaRecorder(mockStream);
-  
+
   // Second cycle
   recorder.start();
   assertEquals(recorder.state, "recording");
@@ -219,6 +223,9 @@ Deno.test("MediaRecorder - multiple start/stop cycles", () => {
 
 Deno.test("MediaRecorder - MIME type support", () => {
   assertEquals(MockMediaRecorder.isTypeSupported("audio/webm"), true);
-  assertEquals(MockMediaRecorder.isTypeSupported("audio/webm;codecs=opus"), true);
+  assertEquals(
+    MockMediaRecorder.isTypeSupported("audio/webm;codecs=opus"),
+    true,
+  );
   assertEquals(MockMediaRecorder.isTypeSupported("video/mp4"), false);
 });

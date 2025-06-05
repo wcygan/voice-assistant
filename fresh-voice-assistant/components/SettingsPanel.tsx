@@ -48,7 +48,7 @@ export default function SettingsPanel(): JSX.Element {
             ? (
               availableModels.value.map((model) => (
                 <option key={model.name} value={model.name}>
-                  {model.name} ({model.parameter_size || "Unknown"})
+                  {model.name}
                 </option>
               ))
             )

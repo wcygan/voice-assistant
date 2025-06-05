@@ -26,10 +26,11 @@ async function checkService(
       message: isHealthy ? "OK" : "Service unavailable",
     };
   } catch (error) {
+    const err = error as Error;
     return {
       service: name,
       status: "unhealthy",
-      message: error.message,
+      message: err.message,
     };
   }
 }

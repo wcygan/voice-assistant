@@ -1,6 +1,9 @@
 /// <reference lib="dom" />
 
-import { assertEquals, assertExists } from "https://deno.land/std@0.213.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertExists,
+} from "https://deno.land/std@0.213.0/assert/mod.ts";
 import { VoiceActivityDetector } from "./voiceActivityDetection.ts";
 
 // Mock requestAnimationFrame for testing
@@ -28,7 +31,7 @@ class MockAnalyserNode {
   fftSize = 2048;
   smoothingTimeConstant = 0.8;
   frequencyBinCount = 1024;
-  
+
   private connected = false;
 
   getByteFrequencyData(array: Uint8Array) {
@@ -54,7 +57,7 @@ class MockAnalyserNode {
 }
 
 class MockMediaStreamAudioSourceNode {
-  connect(_destination: any) {
+  connect(_destination: AudioNode) {
     // Mock implementation
   }
 
@@ -73,10 +76,42 @@ function createMockMediaStream(): MediaStream {
       enabled: true,
       muted: false,
       getSettings: () => ({ sampleRate: 48000 }),
-    }],
+      id: crypto.randomUUID(),
+      contentHint: "",
+      onended: null,
+      onmute: null,
+      onunmute: null,
+      readyState: "live" as MediaStreamTrackState,
+      stop: () => {},
+      clone: () => ({} as MediaStreamTrack),
+      getCapabilities: () => ({}),
+      getConstraints: () => ({}),
+      applyConstraints: () => Promise.resolve(),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    } as MediaStreamTrack],
     getTracks: () => [{
       stop: () => {},
-    }],
+      kind: "audio",
+      label: "Mock Audio Track",
+      enabled: true,
+      muted: false,
+      id: crypto.randomUUID(),
+      contentHint: "",
+      onended: null,
+      onmute: null,
+      onunmute: null,
+      readyState: "live" as MediaStreamTrackState,
+      clone: () => ({} as MediaStreamTrack),
+      getCapabilities: () => ({}),
+      getConstraints: () => ({}),
+      getSettings: () => ({}),
+      applyConstraints: () => Promise.resolve(),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    } as MediaStreamTrack],
   };
 }
 
@@ -86,7 +121,7 @@ Deno.test("VoiceActivityDetector - initialization", () => {
   const onVoiceEnd = () => {};
 
   const vad = new VoiceActivityDetector(mockContext, onVoiceStart, onVoiceEnd);
-  
+
   assertExists(vad);
 });
 
@@ -101,15 +136,20 @@ Deno.test("VoiceActivityDetector - custom config", () => {
     minSpeechDuration: 600,
   };
 
-  const vad = new VoiceActivityDetector(mockContext, onVoiceStart, onVoiceEnd, customConfig);
-  
+  const vad = new VoiceActivityDetector(
+    mockContext,
+    onVoiceStart,
+    onVoiceEnd,
+    customConfig,
+  );
+
   assertExists(vad);
 });
 
 Deno.test("VoiceActivityDetector - getCurrentVolume returns 0 when not listening", () => {
   const mockContext = new MockAudioContext() as unknown as AudioContext;
   const vad = new VoiceActivityDetector(mockContext, () => {}, () => {});
-  
+
   const volume = vad.getCurrentVolume();
   assertEquals(volume, 0);
 });
@@ -117,33 +157,37 @@ Deno.test("VoiceActivityDetector - getCurrentVolume returns 0 when not listening
 Deno.test("VoiceActivityDetector - start and stop", async () => {
   const mockContext = new MockAudioContext() as unknown as AudioContext;
   const mockStream = createMockMediaStream();
-  
-  let voiceStartCalled = false;
-  let voiceEndCalled = false;
-  
+
+  let _voiceStartCalled = false;
+  let _voiceEndCalled = false;
+
   const vad = new VoiceActivityDetector(
     mockContext,
-    () => { voiceStartCalled = true; },
-    () => { voiceEndCalled = true; },
+    () => {
+      _voiceStartCalled = true;
+    },
+    () => {
+      _voiceEndCalled = true;
+    },
     {
       voiceThreshold: 30,
       silenceDelay: 100, // Short delay for testing
       minSpeechDuration: 50, // Short duration for testing
-    }
+    },
   );
-  
+
   // Start VAD
   vad.start(mockStream);
-  
+
   // Add small delay to let VAD initialize
-  await new Promise(resolve => setTimeout(resolve, 50));
-  
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
   // Stop VAD - this should clean up all timers
   vad.stop();
-  
+
   // Add small delay to ensure cleanup is complete
-  await new Promise(resolve => setTimeout(resolve, 50));
-  
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
   // Volume should be 0 after stopping
   assertEquals(vad.getCurrentVolume(), 0);
 });
@@ -151,13 +195,13 @@ Deno.test("VoiceActivityDetector - start and stop", async () => {
 Deno.test("VoiceActivityDetector - updateConfig", () => {
   const mockContext = new MockAudioContext() as unknown as AudioContext;
   const vad = new VoiceActivityDetector(mockContext, () => {}, () => {});
-  
+
   // Update config
   vad.updateConfig({
     voiceThreshold: 60,
     silenceDelay: 2500,
   });
-  
+
   // Test that update doesn't throw
   assertExists(vad);
 });
@@ -165,25 +209,30 @@ Deno.test("VoiceActivityDetector - updateConfig", () => {
 Deno.test("VoiceActivityDetector - voice detection simulation", async () => {
   const mockContext = new MockAudioContext() as unknown as AudioContext;
   const mockStream = createMockMediaStream();
-  
+
   let voiceStartCount = 0;
   let voiceEndCount = 0;
-  
+
   const vad = new VoiceActivityDetector(
     mockContext,
-    () => { voiceStartCount++; },
-    () => { voiceEndCount++; },
+    () => {
+      voiceStartCount++;
+    },
+    () => {
+      voiceEndCount++;
+    },
     {
       voiceThreshold: 30,
       silenceDelay: 100, // Short delay for testing
       minSpeechDuration: 50, // Short duration for testing
-    }
+    },
   );
-  
+
   // Override the analyser to simulate voice detection
-  const mockAnalyser = mockContext.createAnalyser() as MockAnalyserNode;
+  const mockAnalyser = mockContext
+    .createAnalyser() as unknown as MockAnalyserNode;
   let simulateVoice = false;
-  
+
   mockAnalyser.getByteFrequencyData = (array: Uint8Array) => {
     for (let i = 0; i < array.length; i++) {
       if (simulateVoice) {
@@ -195,24 +244,24 @@ Deno.test("VoiceActivityDetector - voice detection simulation", async () => {
       }
     }
   };
-  
+
   // Start VAD
   vad.start(mockStream);
-  
+
   // Simulate voice detection for a short time
   simulateVoice = true;
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   // Simulate silence
   simulateVoice = false;
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   // Stop VAD - this should clean up all timers
   vad.stop();
-  
+
   // Add delay to ensure cleanup is complete
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
   // We can't easily test the actual callbacks due to requestAnimationFrame
   // but we can verify the VAD doesn't crash
   assertExists(vad);

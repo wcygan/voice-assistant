@@ -265,7 +265,8 @@ except Exception as e:
         throw new Error("Invalid base64 encoding produced");
       }
     } catch (encodingError) {
-      log(`${RED}❌ Base64 encoding failed: ${encodingError.message}${RESET}`);
+      const err = encodingError as Error;
+      log(`${RED}❌ Base64 encoding failed: ${err.message}${RESET}`);
       throw new Error("Audio encoding failed");
     }
 
@@ -281,10 +282,11 @@ except Exception as e:
       audioResponse: base64Audio,
     };
   } catch (error) {
-    log(`${RED}❌ Processing error: ${error.message}${RESET}`);
+    const err = error as Error;
+    log(`${RED}❌ Processing error: ${err.message}${RESET}`);
     return {
       success: false,
-      error: error.message,
+      error: err.message,
     };
   }
 }
@@ -326,11 +328,12 @@ export const handler = {
         },
       });
     } catch (error) {
-      log(`${RED}❌ Voice API error: ${error.message}${RESET}`);
+      const err = error as Error;
+      log(`${RED}❌ Voice API error: ${err.message}${RESET}`);
       return new Response(
         JSON.stringify({
           success: false,
-          error: error.message,
+          error: err.message,
         }),
         {
           status: 400,
