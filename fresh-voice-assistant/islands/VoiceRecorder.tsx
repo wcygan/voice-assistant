@@ -35,7 +35,7 @@ export default function VoiceRecorder(): JSX.Element {
   const audioRef = useRef<HTMLAudioElement>(null);
   const volumeIntervalRef = useRef<number | null>(null);
   const recordingStartTime = useRef<number | null>(null);
-  const isRecorderActive = useRef<boolean>(false); // Track if current recorder should accept chunks
+  const recordingSessionIdRef = useRef<string | null>(null); // Track the current active recording session
 
   // Check microphone permissions on component mount
   useEffect(() => {
@@ -114,18 +114,18 @@ export default function VoiceRecorder(): JSX.Element {
       // Create VAD instance with improved settings
       const vadInstance = new VoiceActivityDetector(
         audioContext!,
-        () => {
+        async () => {
           if (!isRecording.value && !isProcessing.value) {
             console.log("🎙️ VAD: Voice detected, starting recording");
             setIsVadListening(true); // Update UI immediately
-            startRecording();
+            await startRecording();
           }
         },
-        () => {
+        async () => {
           if (isRecording.value && !isProcessing.value) {
             console.log("🎙️ VAD: Voice ended, stopping recording");
             setIsVadListening(false); // Update UI immediately
-            stopRecording();
+            await stopRecording();
           }
         },
         {
@@ -173,7 +173,7 @@ export default function VoiceRecorder(): JSX.Element {
     setIsVadEnabled(false);
     setIsVadListening(false);
     setCurrentVolume(0);
-    isRecorderActive.current = false; // Stop any ongoing recording chunks
+    recordingSessionIdRef.current = null; // Clear any active session
     updateStatus("🎙️ Auto-detect OFF");
   }
 
@@ -185,15 +185,14 @@ export default function VoiceRecorder(): JSX.Element {
         return;
       }
 
-      // Stop any existing recorder first
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        console.log(
-          "⚠️ Stopping existing MediaRecorder before starting new one",
-        );
-        isRecorderActive.current = false; // Disable chunk processing for old recorder
-        mediaRecorder.stop();
-        setMediaRecorder(null);
-      }
+      // *** CRUCIAL FIX ***
+      // Ensure any previous recorder is fully stopped and cleaned up before starting a new one.
+      await stopRecording();
+
+      // Generate a unique ID for this new recording session
+      const sessionId = crypto.randomUUID();
+      recordingSessionIdRef.current = sessionId;
+      console.log(`🎙️ Starting new recording session: ${sessionId}`);
 
       // Initialize audio context on first user interaction
       if (!audioContext) {
@@ -245,34 +244,46 @@ export default function VoiceRecorder(): JSX.Element {
 
       const chunks: Blob[] = [];
 
-      // Mark this recorder as active at the component level
-      isRecorderActive.current = true;
-
+      // Attach the fortified ondataavailable handler
       recorder.ondataavailable = (event) => {
-        // Only process chunks if this recorder is still active
-        if (!isRecorderActive.current) {
-          console.log("⚠️ Ignoring chunk after recorder stopped");
+        // *** CRUCIAL FIX ***
+        // Only accept chunks if the session ID matches the active one.
+        if (recordingSessionIdRef.current !== sessionId) {
+          console.log(
+            `⚠️ Ignoring chunk from orphaned recorder session: ${sessionId}`,
+          );
           return;
         }
 
         if (event.data && event.data.size > 0) {
           chunks.push(event.data);
-          console.log(`📼 Received chunk: ${event.data.size} bytes`);
+          console.log(
+            `📼 Received chunk: ${event.data.size} bytes (Session: ${sessionId})`,
+          );
         } else {
           console.log("⚠️ Received empty data chunk");
         }
       };
 
       recorder.onstop = () => {
-        isRecorderActive.current = false; // Stop accepting new chunks
-        console.log(`📼 Recording stopped. Total chunks: ${chunks.length}`);
-        // Add a delay to ensure all chunks are collected
-        setTimeout(() => {
-          processRecording(chunks);
-          // Always stop the recording stream tracks
-          // (it's either a new stream or a clone, so we should clean it up)
-          recordingStream!.getTracks().forEach((track) => track.stop());
-        }, 100); // 100ms delay to collect final chunks
+        // *** CRUCIAL FIX ***
+        // The onstop logic should also respect the session ID.
+        if (recordingSessionIdRef.current === null) { // null means stop was initiated
+          console.log(
+            `📼 Recording stopped. Total chunks: ${chunks.length} (Session: ${sessionId})`,
+          );
+          // Add a delay to ensure all chunks are collected
+          setTimeout(() => {
+            processRecording(chunks);
+            // Always stop the recording stream tracks
+            // (it's either a new stream or a clone, so we should clean it up)
+            recordingStream!.getTracks().forEach((track) => track.stop());
+          }, 100); // 100ms delay to collect final chunks
+        } else {
+          console.log(
+            `⚠️ Ignoring onstop from orphaned recorder session: ${sessionId}`,
+          );
+        }
       };
 
       recorder.onerror = (event) => {
@@ -306,7 +317,10 @@ export default function VoiceRecorder(): JSX.Element {
     }
   }
 
-  function stopRecording() {
+  function stopRecording(): Promise<void> {
+    // Clear the active session ID immediately to prevent new events from processing
+    recordingSessionIdRef.current = null;
+
     if (mediaRecorder && isRecording.value) {
       // Check minimum recording duration
       const recordingDuration = recordingStartTime.current
@@ -319,29 +333,46 @@ export default function VoiceRecorder(): JSX.Element {
         // For manual recording, warn about short duration
         console.log(`⚠️ Recording too short: ${recordingDuration}ms`);
         updateStatus("⚠️ Recording too short - please hold longer");
-        // Continue recording
-        return;
+        // Continue recording, restore session ID
+        recordingSessionIdRef.current = crypto.randomUUID();
+        return Promise.resolve();
       }
 
       console.log(`🛑 Stopping recording after ${recordingDuration}ms`);
 
-      // Check MediaRecorder state before stopping
-      if (mediaRecorder.state === "recording") {
-        mediaRecorder.stop();
-      } else {
-        console.log(
-          `⚠️ MediaRecorder not recording, state: ${mediaRecorder.state}`,
-        );
-      }
+      return new Promise((resolve) => {
+        // We need to resolve the promise inside the onstop handler
+        const originalOnStop = mediaRecorder!.onstop;
 
-      isRecording.value = false;
-      recordingStartTime.current = null;
-      updateStatus(
-        isVadEnabled
-          ? "🎙️ Auto-detect ON - Waiting..."
-          : "✅ Recording stopped",
-      );
+        mediaRecorder!.onstop = (event) => {
+          if (originalOnStop) {
+            originalOnStop.call(mediaRecorder!, event);
+          }
+          console.log("✅ stopRecording promise resolved after onstop.");
+          resolve();
+        };
+
+        // Check MediaRecorder state before stopping
+        if (mediaRecorder!.state === "recording") {
+          mediaRecorder!.stop();
+        } else {
+          console.log(
+            `⚠️ MediaRecorder not recording, state: ${mediaRecorder!.state}`,
+          );
+          // If not recording, it won't fire onstop, so resolve immediately
+          resolve();
+        }
+
+        isRecording.value = false;
+        recordingStartTime.current = null;
+        updateStatus(
+          isVadEnabled
+            ? "🎙️ Auto-detect ON - Waiting..."
+            : "✅ Recording stopped",
+        );
+      });
     }
+    return Promise.resolve();
   }
 
   async function processRecording(chunks: Blob[]) {
@@ -714,13 +745,13 @@ export default function VoiceRecorder(): JSX.Element {
     return arrayBuffer;
   }
 
-  function handleRecordClick() {
+  async function handleRecordClick() {
     if (isProcessing.value) return;
 
     if (isRecording.value) {
-      stopRecording();
+      await stopRecording();
     } else {
-      startRecording();
+      await startRecording();
     }
   }
 
