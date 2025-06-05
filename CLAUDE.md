@@ -138,3 +138,97 @@ deno task check    # Type check
 - **Model Storage**: Models downloaded to user cache directories
 - **Audio Formats**: WAV preferred, auto-conversion supported
 - **Real-time Performance**: STT/TTS optimized for speed, LLM for quality
+
+## Known Issues & Limitations
+
+### Performance
+- **10-18 second end-to-end latency** for full pipeline (STT→LLM→TTS)
+- **Base64 encoding overhead** for audio transport - consider binary alternatives
+- **Sequential processing** prevents parallelization opportunities
+
+### Code Organization
+- **VoiceRecorder.tsx is too large (1159 lines)** - needs refactoring into:
+  - VAD component
+  - Audio processing utilities
+  - Recording state management
+  - UI components
+- **Orphaned MediaRecorder tracking** is a workaround for deeper state issues
+
+### Security & Stability
+- **No request validation** on API endpoints
+- **No rate limiting** - vulnerable to abuse
+- **Missing authentication** for production deployment
+- **Potential memory leaks** with long-running audio contexts
+
+## Architecture Details
+
+### Frontend (Fresh)
+- **Islands Architecture**: Interactive components in `islands/`
+- **State Management**: Preact Signals in `signals/voiceState.ts`
+- **Components**: Static UI in `components/`, interactive in `islands/`
+- **Routes**: API endpoints in `routes/api/`, pages in `routes/`
+
+### Audio Processing Pipeline
+```
+[Microphone] → [MediaRecorder] → [VAD] → [Base64 Encoding] → [API]
+     ↓                                                           ↓
+[TTS Audio] ← [Base64 Decoding] ← [API Response] ← [LLM] ← [STT]
+```
+
+### Key Files
+- `islands/VoiceRecorder.tsx`: Main recording interface (needs refactoring)
+- `routes/api/voice.ts`: Voice processing endpoint
+- `utils/voiceActivityDetection.ts`: VAD implementation
+- `scripts/demo/*.ts`: Individual component demos
+
+## Testing Guidelines
+
+### Running Tests
+```bash
+# Unit tests
+deno test
+
+# Specific test files
+deno test tests/mediaRecorder.test.ts
+deno test utils/voiceActivityDetection.test.ts
+
+# Integration test (full pipeline)
+deno task test:roundtrip
+```
+
+### Test Coverage Gaps
+- No API endpoint tests
+- Missing integration tests for web interface
+- No performance benchmarks
+- Limited error scenario testing
+
+## Common Development Pitfalls
+
+1. **MediaRecorder State**: Always check recorder state before operations
+2. **Audio Context**: Must be created after user interaction (browser security)
+3. **Python Dependencies**: Use Python 3.11 specifically (3.12+ breaks Coqui TTS)
+4. **CORS Issues**: Test with actual browser, not just API clients
+5. **Temporary Files**: Clean up `temp_*` directories regularly
+
+## Refactoring Priorities
+
+### High Priority
+1. Split VoiceRecorder.tsx into smaller components
+2. Implement WebSocket streaming for real-time processing
+3. Replace Base64 with binary transport (ArrayBuffer/Blob)
+4. Add request validation middleware
+5. Create comprehensive integration tests
+
+### Medium Priority
+1. Implement caching for TTS responses
+2. Add authentication system
+3. Create shared audio utilities module
+4. Implement proper error recovery
+5. Add performance monitoring
+
+### Future Improvements
+- WebRTC for peer-to-peer audio streaming
+- GPU acceleration for on-device models
+- Multi-language support
+- Conversation context persistence
+- Voice customization options
