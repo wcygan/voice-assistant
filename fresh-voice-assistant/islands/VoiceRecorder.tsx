@@ -194,8 +194,8 @@ export default function VoiceRecorder(): JSX.Element {
       }
 
       // Use existing stream if VAD is enabled, otherwise create new one
-      let recordingStream = stream;
-      if (!recordingStream) {
+      let recordingStream: MediaStream;
+      if (!stream) {
         console.log("📹 Creating new media stream for recording");
         recordingStream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -206,7 +206,9 @@ export default function VoiceRecorder(): JSX.Element {
           },
         });
       } else {
-        console.log("📹 Using existing VAD stream for recording");
+        console.log("📹 Cloning VAD stream for recording");
+        // Clone the stream to avoid interference with VAD
+        recordingStream = stream.clone();
       }
 
       // Verify stream is active
@@ -244,10 +246,9 @@ export default function VoiceRecorder(): JSX.Element {
         // Add a delay to ensure all chunks are collected
         setTimeout(() => {
           processRecording(chunks);
-          // Only stop tracks if not using VAD
-          if (!isVadEnabled) {
-            recordingStream!.getTracks().forEach((track) => track.stop());
-          }
+          // Always stop the recording stream tracks
+          // (it's either a new stream or a clone, so we should clean it up)
+          recordingStream!.getTracks().forEach((track) => track.stop());
         }, 100); // 100ms delay to collect final chunks
       };
 
@@ -260,17 +261,22 @@ export default function VoiceRecorder(): JSX.Element {
       };
 
       // Start recording with timeslice to get regular chunks
-      recorder.start(100); // Get data every 100ms
-      console.log("📼 Called recorder.start(), state:", recorder.state);
-      setMediaRecorder(recorder);
-      setAudioChunks(chunks);
-      isRecording.value = true;
-      recordingStartTime.current = Date.now();
-      updateStatus(
-        isVadEnabled
-          ? "🔴 Recording voice..."
-          : "🔴 Recording... Click to stop",
-      );
+      try {
+        recorder.start(100); // Get data every 100ms
+        console.log("📼 Called recorder.start(), state:", recorder.state);
+        setMediaRecorder(recorder);
+        setAudioChunks(chunks);
+        isRecording.value = true;
+        recordingStartTime.current = Date.now();
+        updateStatus(
+          isVadEnabled
+            ? "🔴 Recording voice..."
+            : "🔴 Recording... Click to stop",
+        );
+      } catch (err) {
+        console.error("❌ Failed to start MediaRecorder:", err);
+        throw err;
+      }
     } catch (error) {
       const err = error as Error;
       setError("❌ Could not start recording: " + err.message);
@@ -294,7 +300,17 @@ export default function VoiceRecorder(): JSX.Element {
         return;
       }
 
-      mediaRecorder.stop();
+      console.log(`🛑 Stopping recording after ${recordingDuration}ms`);
+
+      // Check MediaRecorder state before stopping
+      if (mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+      } else {
+        console.log(
+          `⚠️ MediaRecorder not recording, state: ${mediaRecorder.state}`,
+        );
+      }
+
       isRecording.value = false;
       recordingStartTime.current = null;
       updateStatus(
