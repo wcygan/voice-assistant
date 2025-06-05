@@ -47,11 +47,19 @@ deno task start
 
 ### Basic Voice Interaction
 
+#### Manual Mode (Default)
 1. **Click the microphone button** (🎤 Click to Talk)
 2. **Speak your question or command** clearly
 3. **Click again to stop recording** (or it will auto-stop)
 4. **Wait for processing** (~10-15 seconds total)
 5. **Listen to the AI response** (plays automatically)
+
+#### Auto-Detect Mode (Hands-free) 🎯 NEW!
+1. **Enable Auto-Detect** by clicking "🎙️ Auto-Detect OFF" button
+2. **Just start speaking** - recording begins automatically
+3. **Stop speaking** for 1.5 seconds - recording stops automatically
+4. **AI processes and responds** without any button clicks
+5. **Adjust sensitivity** slider if needed for your environment
 
 ### Audio Playback
 

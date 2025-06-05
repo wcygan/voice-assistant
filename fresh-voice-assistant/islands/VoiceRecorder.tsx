@@ -10,6 +10,7 @@ import {
   systemPrompts,
   updateStatus,
 } from "../signals/voiceState.ts";
+import { VoiceActivityDetector } from "../utils/voiceActivityDetection.ts";
 
 // Type declarations for browser APIs
 declare global {
@@ -25,17 +26,40 @@ export default function VoiceRecorder(): JSX.Element {
   );
   const [_audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [vad, setVad] = useState<VoiceActivityDetector | null>(null);
+  const [isVadEnabled, setIsVadEnabled] = useState(false);
+  const [currentVolume, setCurrentVolume] = useState(0);
+  const [vadSensitivity, setVadSensitivity] = useState(30);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const volumeIntervalRef = useRef<number | null>(null);
 
   // Check microphone permissions on component mount
   useEffect(() => {
     checkMicrophonePermission();
   }, []);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (volumeIntervalRef.current) {
+        clearInterval(volumeIntervalRef.current);
+      }
+      if (vad) {
+        vad.stop();
+      }
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [vad, stream]);
+
   async function checkMicrophonePermission() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
+      const testStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      testStream.getTracks().forEach((track) => track.stop());
       updateStatus("✅ Microphone ready");
     } catch (_error) {
       setError(
@@ -44,8 +68,112 @@ export default function VoiceRecorder(): JSX.Element {
     }
   }
 
+  async function toggleVAD() {
+    if (isVadEnabled) {
+      // Disable VAD
+      stopVAD();
+    } else {
+      // Enable VAD
+      await startVAD();
+    }
+  }
+
+  async function startVAD() {
+    try {
+      if (isProcessing.value || isRecording.value) {
+        return;
+      }
+
+      // Initialize audio context if needed
+      if (!audioContext) {
+        const win = globalThis as unknown as Window;
+        const ctx = new (win.AudioContext || win.webkitAudioContext)();
+        setAudioContext(ctx);
+
+        if (ctx.state === "suspended") {
+          await ctx.resume();
+        }
+      }
+
+      // Get microphone stream
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      setStream(micStream);
+
+      // Create VAD instance
+      const vadInstance = new VoiceActivityDetector(
+        audioContext!,
+        () => {
+          console.log("🎤 Voice detected - starting recording");
+          if (!isRecording.value && !isProcessing.value) {
+            startRecording();
+          }
+        },
+        () => {
+          console.log("🔇 Silence detected - stopping recording");
+          if (isRecording.value && !isProcessing.value) {
+            stopRecording();
+          }
+        },
+        {
+          voiceThreshold: vadSensitivity,
+          silenceDelay: 1500,
+          minSpeechDuration: 300,
+        },
+      );
+
+      vadInstance.start(micStream);
+      setVad(vadInstance);
+      setIsVadEnabled(true);
+
+      // Start monitoring volume levels
+      volumeIntervalRef.current = setInterval(() => {
+        if (vadInstance) {
+          setCurrentVolume(vadInstance.getCurrentVolume());
+        }
+      }, 100);
+
+      updateStatus("🎙️ Auto-detect ON - Start speaking...");
+    } catch (error) {
+      const err = error as Error;
+      setError("❌ Could not start voice detection: " + err.message);
+    }
+  }
+
+  function stopVAD() {
+    if (vad) {
+      vad.stop();
+      setVad(null);
+    }
+
+    if (volumeIntervalRef.current) {
+      clearInterval(volumeIntervalRef.current);
+      volumeIntervalRef.current = null;
+    }
+
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+
+    setIsVadEnabled(false);
+    setCurrentVolume(0);
+    updateStatus("🎙️ Auto-detect OFF");
+  }
+
   async function startRecording() {
     try {
+      // Don't start if already recording or processing
+      if (isRecording.value || isProcessing.value) {
+        return;
+      }
+
       // Initialize audio context on first user interaction
       if (!audioContext) {
         const win = globalThis as unknown as Window;
@@ -60,16 +188,20 @@ export default function VoiceRecorder(): JSX.Element {
         }
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
+      // Use existing stream if VAD is enabled, otherwise create new one
+      let recordingStream = stream;
+      if (!recordingStream) {
+        recordingStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+      }
 
-      const recorder = new MediaRecorder(stream, {
+      const recorder = new MediaRecorder(recordingStream, {
         mimeType: "audio/webm",
       });
 
@@ -81,14 +213,21 @@ export default function VoiceRecorder(): JSX.Element {
 
       recorder.onstop = () => {
         processRecording(chunks);
-        stream.getTracks().forEach((track) => track.stop());
+        // Only stop tracks if not using VAD
+        if (!isVadEnabled) {
+          recordingStream!.getTracks().forEach((track) => track.stop());
+        }
       };
 
       recorder.start();
       setMediaRecorder(recorder);
       setAudioChunks(chunks);
       isRecording.value = true;
-      updateStatus("🔴 Recording... Click to stop");
+      updateStatus(
+        isVadEnabled
+          ? "🔴 Recording voice..."
+          : "🔴 Recording... Click to stop",
+      );
     } catch (error) {
       const err = error as Error;
       setError("❌ Could not start recording: " + err.message);
@@ -476,14 +615,142 @@ export default function VoiceRecorder(): JSX.Element {
 
   return (
     <>
-      <button
-        type="button"
-        class={getButtonClass()}
-        onClick={handleRecordClick}
-        disabled={isProcessing.value}
+      {/* Voice Activity Detection Controls */}
+      <div
+        style={{
+          marginBottom: "20px",
+          padding: "15px",
+          backgroundColor: "rgba(255, 255, 255, 0.1)",
+          borderRadius: "10px",
+        }}
       >
-        {getButtonContent()}
-      </button>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "15px",
+            marginBottom: "10px",
+          }}
+        >
+          <button
+            type="button"
+            onClick={toggleVAD}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: isVadEnabled ? "#4CAF50" : "#666",
+              color: "white",
+              border: "none",
+              borderRadius: "25px",
+              cursor: "pointer",
+              fontSize: "16px",
+              fontWeight: "bold",
+              transition: "all 0.3s ease",
+            }}
+            disabled={isProcessing.value}
+          >
+            {isVadEnabled ? "🎙️ Auto-Detect ON" : "🎙️ Auto-Detect OFF"}
+          </button>
+
+          {isVadEnabled && (
+            <div style={{ flex: 1, fontSize: "14px", opacity: 0.9 }}>
+              {isRecording.value
+                ? "🔴 Listening..."
+                : "💤 Waiting for voice..."}
+            </div>
+          )}
+        </div>
+
+        {/* Volume Meter */}
+        {isVadEnabled && (
+          <div style={{ marginTop: "10px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                fontSize: "12px",
+                marginBottom: "5px",
+              }}
+            >
+              <span>Volume:</span>
+              <div
+                style={{
+                  flex: 1,
+                  height: "20px",
+                  backgroundColor: "rgba(0, 0, 0, 0.3)",
+                  borderRadius: "10px",
+                  overflow: "hidden",
+                  position: "relative",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${(currentVolume / 255) * 100}%`,
+                    backgroundColor: currentVolume > vadSensitivity
+                      ? "#4CAF50"
+                      : "#666",
+                    transition: "width 0.1s ease, background-color 0.3s ease",
+                  }}
+                >
+                </div>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: `${(vadSensitivity / 255) * 100}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: "2px",
+                    backgroundColor: "#FFF",
+                    opacity: 0.7,
+                  }}
+                >
+                </div>
+              </div>
+              <span>{Math.round(currentVolume)}</span>
+            </div>
+
+            {/* Sensitivity Control */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                fontSize: "12px",
+              }}
+            >
+              <span>Sensitivity:</span>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                value={vadSensitivity}
+                onChange={(e) => {
+                  const newValue = parseInt(e.currentTarget.value);
+                  setVadSensitivity(newValue);
+                  if (vad) {
+                    vad.updateConfig({ voiceThreshold: newValue });
+                  }
+                }}
+                style={{ flex: 1 }}
+              />
+              <span>{vadSensitivity}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Regular Recording Button (disabled when VAD is on) */}
+      {!isVadEnabled && (
+        <button
+          type="button"
+          class={getButtonClass()}
+          onClick={handleRecordClick}
+          disabled={isProcessing.value}
+        >
+          {getButtonContent()}
+        </button>
+      )}
 
       <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
         <button
