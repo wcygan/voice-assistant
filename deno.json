@@ -28,6 +28,7 @@
     "setup:all": "deno run --allow-all scripts/setup.ts all",
     "demo:stt": "deno run --allow-all scripts/demo/stt.ts",
     "demo:tts": "deno run --allow-all scripts/demo/tts.ts",
+    "demo:conversation": "deno run --allow-all scripts/demo/conversation.ts",
     "test:roundtrip": "deno run --allow-all scripts/test/roundtrip.ts",
     "fmt": "deno fmt scripts/",
     "lint": "deno lint scripts/",

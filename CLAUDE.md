@@ -23,9 +23,10 @@ brew install ffmpeg python@3.11
 deno task setup
 
 # 4. Try the demos
+deno task demo:conversation      # Complete voice assistant!
 deno task demo:tts --showcase    # See TTS in action
 deno task demo:stt --sample      # Try STT with sample audio
-deno task test:roundtrip         # Full pipeline test
+deno task test:roundtrip         # Pipeline testing
 ```
 
 ## Development Environment Setup
@@ -78,6 +79,11 @@ The voice assistant follows this flow:
 ### Quick Demos
 Showcase individual technologies to users:
 ```bash
+# Complete Voice Assistant - Voice to Voice
+deno task demo:conversation                    # Full AI conversation
+deno task demo:conversation --input question.wav  # Use your audio
+deno task demo:conversation --model llama2-uncensored:7b  # Different AI
+
 # TTS Demo - Text to Speech
 deno task demo:tts --showcase           # Multiple examples
 deno task demo:tts --interactive        # Interactive mode
