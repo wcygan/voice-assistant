@@ -23,10 +23,11 @@ brew install ffmpeg python@3.11
 deno task setup
 
 # 4. Try the demos
-deno task demo:conversation      # Complete voice assistant!
+deno task web                    # 🌐 Web interface (easiest!)
+deno task demo:conversation      # Complete voice assistant
+deno task demo:realtime          # Live microphone input
 deno task demo:tts --showcase    # See TTS in action
 deno task demo:stt --sample      # Try STT with sample audio
-deno task test:roundtrip         # Pipeline testing
 ```
 
 ## Development Environment Setup
@@ -77,22 +78,26 @@ The voice assistant follows this flow:
 ## Demos & Testing
 
 ### Quick Demos
-Showcase individual technologies to users:
+Showcase technologies to users:
 ```bash
-# Complete Voice Assistant - Voice to Voice
-deno task demo:conversation                    # Full AI conversation
+# 🌐 Web Interface (Recommended!)
+deno task web                          # Browser-based voice assistant
+# Open http://localhost:8000 in your browser
+
+# Complete Voice Assistant - Voice to Voice  
+deno task demo:conversation            # Full AI conversation
 deno task demo:conversation --input question.wav  # Use your audio
 deno task demo:conversation --model llama2-uncensored:7b  # Different AI
 
-# TTS Demo - Text to Speech
-deno task demo:tts --showcase           # Multiple examples
-deno task demo:tts --interactive        # Interactive mode
-deno task demo:tts --text "Hello!"      # Single synthesis
+# Real-time Voice Assistant
+deno task demo:realtime                # Live microphone input
+deno task demo:realtime --whisper large  # High accuracy mode
 
-# STT Demo - Speech to Text  
-deno task demo:stt --sample             # Generate & transcribe sample
-deno task demo:stt --input audio.wav    # Transcribe your audio
-deno task demo:stt --input audio.wav --model large  # High accuracy
+# Individual Component Demos
+deno task demo:tts --showcase          # Multiple TTS examples
+deno task demo:tts --interactive       # Interactive mode
+deno task demo:stt --sample            # Generate & transcribe sample
+deno task demo:stt --input audio.wav   # Transcribe your audio
 ```
 
 ### Round-Trip Testing

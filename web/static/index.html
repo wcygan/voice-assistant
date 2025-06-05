@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎤 Voice Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 90%;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+
+        .voice-interface {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            margin: 2rem 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .record-button {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            margin: 1rem auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .record-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.4);
+        }
+
+        .record-button.recording {
+            background: linear-gradient(45deg, #ff3838, #c44569);
+            animation: pulse 1.5s infinite;
+        }
+
+        .record-button.processing {
+            background: linear-gradient(45deg, #f39c12, #e67e22);
+            cursor: not-allowed;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .status {
+            margin: 1rem 0;
+            font-size: 1.1rem;
+            min-height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .conversation {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin: 1rem 0;
+            padding: 0.8rem;
+            border-radius: 10px;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background: rgba(102, 126, 234, 0.3);
+            margin-left: 2rem;
+        }
+
+        .ai-message {
+            background: rgba(118, 75, 162, 0.3);
+            margin-right: 2rem;
+        }
+
+        .settings {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .setting-group {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 10px;
+        }
+
+        .setting-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .setting-group select,
+        .setting-group input {
+            width: 100%;
+            padding: 0.5rem;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+
+        .error {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+        }
+
+        .audio-visualizer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 60px;
+            margin: 1rem 0;
+        }
+
+        .bar {
+            width: 4px;
+            background: linear-gradient(to top, #667eea, #764ba2);
+            margin: 0 2px;
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        .instructions {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Voice Assistant</h1>
+        <p class="subtitle">Speak naturally and get AI-powered responses</p>
+
+        <div class="voice-interface">
+            <button id="recordButton" class="record-button">
+                <div>🎤</div>
+                <div>Click to Talk</div>
+            </button>
+
+            <div id="status" class="status">Ready to listen</div>
+
+            <div id="audioVisualizer" class="audio-visualizer hidden">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+            </div>
+
+            <div id="error" class="error hidden"></div>
+        </div>
+
+        <div id="conversation" class="conversation">
+            <div class="message ai-message">
+                👋 Hi! I'm your voice assistant. Click the microphone button and start speaking to have a conversation with me.
+            </div>
+        </div>
+
+        <div class="settings">
+            <div class="setting-group">
+                <label for="llmModel">AI Model:</label>
+                <select id="llmModel">
+                    <option value="mistral-small3.1:latest">Mistral Small (Fast)</option>
+                    <option value="llama2-uncensored:7b">Llama2 Uncensored</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label for="whisperModel">Speech Recognition:</label>
+                <select id="whisperModel">
+                    <option value="base" selected>Base (Fast)</option>
+                    <option value="small">Small (Better)</option>
+                    <option value="medium">Medium (Best)</option>
+                </select>
+            </div>
+
+            <div class="setting-group">
+                <label for="systemPrompt">AI Personality:</label>
+                <select id="systemPrompt">
+                    <option value="You are a helpful voice assistant. Keep responses very brief and conversational, ideally 1-2 sentences.">Helpful Assistant</option>
+                    <option value="You are a friendly coding assistant. Help with programming questions and keep responses concise.">Coding Assistant</option>
+                    <option value="You are a creative writing assistant. Help with stories, ideas, and creative projects.">Creative Writer</option>
+                    <option value="You are a wise mentor. Provide thoughtful advice and insights in 1-2 sentences.">Wise Mentor</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <strong>How to use:</strong><br>
+            1. Click the microphone button<br>
+            2. Speak your question clearly<br>
+            3. Click again to stop recording<br>
+            4. Listen to the AI response<br>
+            <br>
+            <strong>Tips:</strong> Speak clearly, minimize background noise, and keep questions concise for best results.
+        </div>
+    </div>
+
+    <script>
+        class VoiceAssistant {
+            constructor() {
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.isRecording = false;
+                this.isProcessing = false;
+                
+                this.recordButton = document.getElementById('recordButton');
+                this.status = document.getElementById('status');
+                this.conversation = document.getElementById('conversation');
+                this.error = document.getElementById('error');
+                this.audioVisualizer = document.getElementById('audioVisualizer');
+                
+                this.setupEventListeners();
+                this.checkMicrophonePermission();
+            }
+
+            setupEventListeners() {
+                this.recordButton.addEventListener('click', () => {
+                    if (this.isProcessing) return;
+                    
+                    if (this.isRecording) {
+                        this.stopRecording();
+                    } else {
+                        this.startRecording();
+                    }
+                });
+            }
+
+            async checkMicrophonePermission() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(track => track.stop());
+                    this.updateStatus('✅ Microphone ready');
+                } catch (error) {
+                    this.showError('❌ Microphone access denied. Please allow microphone access and refresh the page.');
+                }
+            }
+
+            async startRecording() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            sampleRate: 16000,
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true
+                        } 
+                    });
+
+                    this.mediaRecorder = new MediaRecorder(stream, {
+                        mimeType: 'audio/webm'
+                    });
+
+                    this.audioChunks = [];
+                    this.isRecording = true;
+
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        this.audioChunks.push(event.data);
+                    };
+
+                    this.mediaRecorder.onstop = () => {
+                        this.processRecording();
+                    };
+
+                    this.mediaRecorder.start();
+                    this.updateUI();
+                    this.updateStatus('🔴 Recording... Click to stop');
+                    this.showVisualizer();
+
+                } catch (error) {
+                    this.showError('❌ Could not start recording: ' + error.message);
+                }
+            }
+
+            stopRecording() {
+                if (this.mediaRecorder && this.isRecording) {
+                    this.mediaRecorder.stop();
+                    this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                    this.isRecording = false;
+                    this.updateUI();
+                    this.hideVisualizer();
+                }
+            }
+
+            async processRecording() {
+                this.isProcessing = true;
+                this.updateUI();
+                this.updateStatus('🎯 Processing speech...');
+
+                try {
+                    // Convert audio to base64
+                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                    const arrayBuffer = await audioBlob.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    const base64Audio = btoa(String.fromCharCode(...uint8Array));
+
+                    // Send to server
+                    const response = await fetch('/api/voice', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            audio: base64Audio,
+                            model: document.getElementById('llmModel').value,
+                            whisperModel: document.getElementById('whisperModel').value,
+                            systemPrompt: document.getElementById('systemPrompt').value
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        this.addMessage('user', result.transcript);
+                        this.addMessage('ai', result.response);
+                        
+                        if (result.audioResponse) {
+                            this.playAudioResponse(result.audioResponse);
+                        }
+                        
+                        this.updateStatus('✅ Response ready');
+                    } else {
+                        this.showError('❌ ' + (result.error || 'Processing failed'));
+                    }
+
+                } catch (error) {
+                    this.showError('❌ Network error: ' + error.message);
+                } finally {
+                    this.isProcessing = false;
+                    this.updateUI();
+                }
+            }
+
+            playAudioResponse(base64Audio) {
+                try {
+                    const audioData = atob(base64Audio);
+                    const arrayBuffer = new ArrayBuffer(audioData.length);
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    
+                    for (let i = 0; i < audioData.length; i++) {
+                        uint8Array[i] = audioData.charCodeAt(i);
+                    }
+                    
+                    const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(blob);
+                    const audio = new Audio(audioUrl);
+                    
+                    audio.play().then(() => {
+                        this.updateStatus('🔊 Playing response...');
+                    }).catch((error) => {
+                        console.error('Audio playback failed:', error);
+                    });
+                    
+                    audio.onended = () => {
+                        URL.revokeObjectURL(audioUrl);
+                        this.updateStatus('Ready to listen');
+                    };
+                    
+                } catch (error) {
+                    console.error('Audio processing failed:', error);
+                }
+            }
+
+            addMessage(type, text) {
+                const message = document.createElement('div');
+                message.className = `message ${type}-message`;
+                
+                const prefix = type === 'user' ? '👤 You: ' : '🤖 AI: ';
+                message.textContent = prefix + text;
+                
+                this.conversation.appendChild(message);
+                this.conversation.scrollTop = this.conversation.scrollHeight;
+            }
+
+            updateUI() {
+                const button = this.recordButton;
+                
+                if (this.isProcessing) {
+                    button.className = 'record-button processing';
+                    button.innerHTML = '<div>⏳</div><div>Processing...</div>';
+                } else if (this.isRecording) {
+                    button.className = 'record-button recording';
+                    button.innerHTML = '<div>⏹️</div><div>Stop Recording</div>';
+                } else {
+                    button.className = 'record-button';
+                    button.innerHTML = '<div>🎤</div><div>Click to Talk</div>';
+                }
+            }
+
+            updateStatus(message) {
+                this.status.textContent = message;
+            }
+
+            showError(message) {
+                this.error.textContent = message;
+                this.error.classList.remove('hidden');
+                setTimeout(() => {
+                    this.error.classList.add('hidden');
+                }, 5000);
+            }
+
+            showVisualizer() {
+                this.audioVisualizer.classList.remove('hidden');
+                this.animateVisualizer();
+            }
+
+            hideVisualizer() {
+                this.audioVisualizer.classList.add('hidden');
+            }
+
+            animateVisualizer() {
+                const bars = this.audioVisualizer.querySelectorAll('.bar');
+                
+                const animate = () => {
+                    if (!this.isRecording) return;
+                    
+                    bars.forEach(bar => {
+                        const height = Math.random() * 40 + 10;
+                        bar.style.height = height + 'px';
+                    });
+                    
+                    setTimeout(animate, 100);
+                };
+                
+                animate();
+            }
+        }
+
+        // Initialize the voice assistant when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new VoiceAssistant();
+        });
+    </script>
+</body>
+</html>
