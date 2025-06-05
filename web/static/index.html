@@ -229,7 +229,9 @@
             <div class="setting-group">
                 <label for="llmModel">AI Model:</label>
                 <select id="llmModel">
-                    <option value="mistral-small3.1:latest">Mistral Small (Fast)</option>
+                    <option value="llama3.2:1b" selected>Llama 3.2 1B (Fast)</option>
+                    <option value="qwen3:0.6b">Qwen3 0.6B</option>
+                    <option value="mistral-small3.1:latest">Mistral Small</option>
                     <option value="llama2-uncensored:7b">Llama2 Uncensored</option>
                 </select>
             </div>
@@ -402,7 +404,21 @@
 
             playAudioResponse(base64Audio) {
                 try {
-                    const audioData = atob(base64Audio);
+                    // Validate base64 string first
+                    if (!base64Audio || typeof base64Audio !== 'string') {
+                        throw new Error('Invalid audio data received');
+                    }
+                    
+                    // Clean up base64 string (remove any whitespace/newlines)
+                    const cleanBase64 = base64Audio.replace(/\s/g, '');
+                    
+                    // Validate base64 format
+                    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+                    if (!base64Regex.test(cleanBase64)) {
+                        throw new Error('Malformed base64 audio data');
+                    }
+                    
+                    const audioData = atob(cleanBase64);
                     const arrayBuffer = new ArrayBuffer(audioData.length);
                     const uint8Array = new Uint8Array(arrayBuffer);
                     
@@ -418,6 +434,7 @@
                         this.updateStatus('🔊 Playing response...');
                     }).catch((error) => {
                         console.error('Audio playback failed:', error);
+                        this.updateStatus('❌ Audio playback failed');
                     });
                     
                     audio.onended = () => {
@@ -427,6 +444,13 @@
                     
                 } catch (error) {
                     console.error('Audio processing failed:', error);
+                    this.updateStatus('❌ Audio processing failed');
+                    
+                    // Log more details for debugging
+                    if (base64Audio) {
+                        console.error('Base64 audio length:', base64Audio.length);
+                        console.error('Base64 audio sample:', base64Audio.substring(0, 100));
+                    }
                 }
             }
 

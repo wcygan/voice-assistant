@@ -64,7 +64,7 @@ async function checkDependencies(): Promise<boolean> {
 async function processVoiceRequest(request: VoiceRequest): Promise<VoiceResponse> {
   const {
     audio,
-    model = "mistral-small3.1:latest",
+    model = "llama3.2:1b",
     whisperModel = "base",
     ttsModel = "tts_models/en/ljspeech/tacotron2-DDC",
     systemPrompt = "You are a helpful voice assistant. Keep responses very brief and conversational, ideally 1-2 sentences."
@@ -182,12 +182,14 @@ except Exception as e:
     const audioResponse = await Deno.readFile(outputPath);
     console.log(`${CYAN}Encoding audio response (${audioResponse.length} bytes)${RESET}`);
     
-    // Convert to base64 in chunks to avoid stack overflow
-    let base64Audio = "";
-    const chunkSize = 8192;
-    for (let i = 0; i < audioResponse.length; i += chunkSize) {
-      const chunk = audioResponse.slice(i, i + chunkSize);
-      base64Audio += btoa(String.fromCharCode(...chunk));
+    // Convert to base64 using proper encoding
+    const base64Audio = btoa(Array.from(audioResponse, byte => String.fromCharCode(byte)).join(''));
+    
+    // Validate the base64 encoding
+    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+    if (!base64Regex.test(base64Audio)) {
+      console.error(`${RED}❌ Invalid base64 encoding produced${RESET}`);
+      throw new Error("Audio encoding failed");
     }
     
     console.log(`${GREEN}✅ Voice response generated${RESET}`);
