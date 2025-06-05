@@ -32,10 +32,12 @@ export default function VoiceRecorder(): JSX.Element {
   const [vadSensitivity, setVadSensitivity] = useState(40); // Increased default for better noise rejection
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isVadListening, setIsVadListening] = useState(false); // Track VAD listening state
+  const [isVadStopping, setIsVadStopping] = useState(false); // Track when VAD voice ended but still stopping
   const audioRef = useRef<HTMLAudioElement>(null);
   const volumeIntervalRef = useRef<number | null>(null);
   const recordingStartTime = useRef<number | null>(null);
   const recordingSessionIdRef = useRef<string | null>(null); // Track the current active recording session
+  const orphanedRecordersRef = useRef<Set<MediaRecorder>>(new Set()); // Track orphaned recorders to terminate them
 
   // Check microphone permissions on component mount
   useEffect(() => {
@@ -53,6 +55,27 @@ export default function VoiceRecorder(): JSX.Element {
       }
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
+      }
+
+      // *** CLEANUP ORPHANED SESSIONS ON UNMOUNT ***
+      // Kill any remaining orphaned recorders when component unmounts
+      if (orphanedRecordersRef.current.size > 0) {
+        console.log(
+          `🔥 Component unmounting, cleaning up ${orphanedRecordersRef.current.size} orphaned recorder(s)`,
+        );
+        for (const orphanedRecorder of orphanedRecordersRef.current) {
+          try {
+            if (orphanedRecorder.state === "recording") {
+              orphanedRecorder.stop();
+            }
+          } catch (error) {
+            console.log(
+              "⚠️ Error stopping orphaned recorder on unmount:",
+              error,
+            );
+          }
+        }
+        orphanedRecordersRef.current.clear();
       }
     };
   }, [vad, stream]);
@@ -125,7 +148,9 @@ export default function VoiceRecorder(): JSX.Element {
           if (isRecording.value && !isProcessing.value) {
             console.log("🎙️ VAD: Voice ended, stopping recording");
             setIsVadListening(false); // Update UI immediately
+            setIsVadStopping(true); // Show that we're in stopping state
             await stopRecording();
+            setIsVadStopping(false); // Clear stopping state after completion
           }
         },
         {
@@ -172,8 +197,31 @@ export default function VoiceRecorder(): JSX.Element {
 
     setIsVadEnabled(false);
     setIsVadListening(false);
+    setIsVadStopping(false);
     setCurrentVolume(0);
     recordingSessionIdRef.current = null; // Clear any active session
+
+    // *** CLEANUP ORPHANED SESSIONS ***
+    // Kill any remaining orphaned recorders when VAD is disabled
+    if (orphanedRecordersRef.current.size > 0) {
+      console.log(
+        `🔥 Cleaning up ${orphanedRecordersRef.current.size} orphaned recorder(s) on VAD stop`,
+      );
+      for (const orphanedRecorder of orphanedRecordersRef.current) {
+        try {
+          if (orphanedRecorder.state === "recording") {
+            orphanedRecorder.stop();
+          }
+        } catch (error) {
+          console.log(
+            "⚠️ Error stopping orphaned recorder on VAD cleanup:",
+            error,
+          );
+        }
+      }
+      orphanedRecordersRef.current.clear();
+    }
+
     updateStatus("🎙️ Auto-detect OFF");
   }
 
@@ -188,6 +236,24 @@ export default function VoiceRecorder(): JSX.Element {
       // *** CRUCIAL FIX ***
       // Ensure any previous recorder is fully stopped and cleaned up before starting a new one.
       await stopRecording();
+
+      // *** KILL ORPHANED SESSIONS ***
+      // Actively terminate any orphaned MediaRecorder instances
+      if (orphanedRecordersRef.current.size > 0) {
+        console.log(
+          `🔥 Terminating ${orphanedRecordersRef.current.size} orphaned recorder(s)`,
+        );
+        for (const orphanedRecorder of orphanedRecordersRef.current) {
+          try {
+            if (orphanedRecorder.state === "recording") {
+              orphanedRecorder.stop();
+            }
+          } catch (error) {
+            console.log("⚠️ Error stopping orphaned recorder:", error);
+          }
+        }
+        orphanedRecordersRef.current.clear();
+      }
 
       // Generate a unique ID for this new recording session
       const sessionId = crypto.randomUUID();
@@ -266,6 +332,10 @@ export default function VoiceRecorder(): JSX.Element {
       };
 
       recorder.onstop = () => {
+        // *** REMOVE FROM ORPHANED SET ***
+        // This recorder is properly stopping, remove it from orphaned tracking
+        orphanedRecordersRef.current.delete(recorder);
+
         // *** CRUCIAL FIX ***
         // The onstop logic should also respect the session ID.
         if (recordingSessionIdRef.current === null) { // null means stop was initiated
@@ -299,6 +369,11 @@ export default function VoiceRecorder(): JSX.Element {
         recorder.start(100); // Get data every 100ms
         console.log("📼 Called recorder.start(), state:", recorder.state);
         setMediaRecorder(recorder);
+
+        // *** TRACK POTENTIAL ORPHANS ***
+        // Add this recorder to orphaned set in case it becomes orphaned later
+        orphanedRecordersRef.current.add(recorder);
+
         setAudioChunks(chunks);
         isRecording.value = true;
         recordingStartTime.current = Date.now();
@@ -826,7 +901,9 @@ export default function VoiceRecorder(): JSX.Element {
 
           {isVadEnabled && (
             <div style={{ flex: 1, fontSize: "14px", opacity: 0.9 }}>
-              {isVadListening || isRecording.value
+              {isVadStopping
+                ? "⏹️ Voice ended, processing..."
+                : isVadListening || isRecording.value
                 ? "🔴 Listening..."
                 : "💤 Waiting for voice..."}
             </div>
