@@ -10,6 +10,7 @@ import * as $api_models from "./routes/api/models.ts";
 import * as $api_voice from "./routes/api/voice.ts";
 import * as $greet_name_ from "./routes/greet/[name].tsx";
 import * as $index from "./routes/index.tsx";
+import * as $ConversationHistory from "./islands/ConversationHistory.tsx";
 import * as $Counter from "./islands/Counter.tsx";
 import * as $VoiceRecorder from "./islands/VoiceRecorder.tsx";
 import type { Manifest } from "$fresh/server.ts";
@@ -26,6 +27,7 @@ const manifest = {
     "./routes/index.tsx": $index,
   },
   islands: {
+    "./islands/ConversationHistory.tsx": $ConversationHistory,
     "./islands/Counter.tsx": $Counter,
     "./islands/VoiceRecorder.tsx": $VoiceRecorder,
   },

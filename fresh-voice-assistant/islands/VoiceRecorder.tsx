@@ -106,6 +106,14 @@ export default function VoiceRecorder(): JSX.Element {
         addMessage('user', result.transcript);
         addMessage('ai', result.response);
         
+        // Scroll to bottom after adding messages
+        setTimeout(() => {
+          const conversation = document.querySelector('.conversation');
+          if (conversation) {
+            conversation.scrollTop = conversation.scrollHeight;
+          }
+        }, 100);
+        
         if (result.audioResponse) {
           audioResponse.value = result.audioResponse;
           playAudioResponse(result.audioResponse);

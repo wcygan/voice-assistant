@@ -1,7 +1,7 @@
 import { useEffect } from "preact/hooks";
 import { Head } from "$fresh/runtime.ts";
 import VoiceInterface from "../components/VoiceInterface.tsx";
-import ConversationHistory from "../components/ConversationHistory.tsx";
+import ConversationHistory from "../islands/ConversationHistory.tsx";
 import SettingsPanel from "../components/SettingsPanel.tsx";
 import { availableModels } from "../signals/voiceState.ts";
 
