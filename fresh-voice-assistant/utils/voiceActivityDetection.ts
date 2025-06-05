@@ -231,37 +231,28 @@ export class VoiceActivityDetector {
 
   // Get current volume level (0-255)
   getCurrentVolume(): number {
-    if (!this.isListening) return 0;
+    if (!this.isListening || !this.analyser) return 0;
 
-    // Try time domain data for debugging
-    const timeData = new Uint8Array(this.analyser.frequencyBinCount);
-    this.analyser.getByteTimeDomainData(timeData);
-
-    // Calculate RMS volume from time domain
-    let sum = 0;
-    for (let i = 0; i < timeData.length; i++) {
-      const normalized = (timeData[i] - 128) / 128; // Normalize to -1 to 1
-      sum += normalized * normalized;
-    }
-    const rms = Math.sqrt(sum / timeData.length);
-    const _rmsVolume = rms * 255; // Scale to 0-255
-
-    // Also try frequency data
+    // Get frequency data
     this.analyser.getByteFrequencyData(this.dataArray);
-    let freqSum = 0;
-    let maxFreq = 0;
+
+    // Calculate average volume with focus on voice frequencies
+    let voiceSum = 0;
+    let voiceCount = 0;
+    const nyquist = this.audioContext.sampleRate / 2;
+    const binHz = nyquist / this.analyser.frequencyBinCount;
 
     for (let i = 0; i < this.dataArray.length; i++) {
-      freqSum += this.dataArray[i];
-      maxFreq = Math.max(maxFreq, this.dataArray[i]);
+      const freq = i * binHz;
+      // Focus on voice frequency range (85Hz - 3kHz)
+      if (freq >= 85 && freq <= 3000) {
+        voiceSum += this.dataArray[i];
+        voiceCount++;
+      }
     }
 
-    const freqAverage = freqSum / this.dataArray.length;
-
-    // Removed verbose logging - audio detection is working
-
-    // Use frequency average for now
-    return freqAverage;
+    // Return voice-focused average
+    return voiceCount > 0 ? voiceSum / voiceCount : 0;
   }
 
   // Update configuration

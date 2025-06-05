@@ -31,6 +31,7 @@ export default function VoiceRecorder(): JSX.Element {
   const [currentVolume, setCurrentVolume] = useState(0);
   const [vadSensitivity, setVadSensitivity] = useState(40); // Increased default for better noise rejection
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isVadListening, setIsVadListening] = useState(false); // Track VAD listening state
   const audioRef = useRef<HTMLAudioElement>(null);
   const volumeIntervalRef = useRef<number | null>(null);
   const recordingStartTime = useRef<number | null>(null);
@@ -115,12 +116,14 @@ export default function VoiceRecorder(): JSX.Element {
         () => {
           if (!isRecording.value && !isProcessing.value) {
             console.log("🎙️ VAD: Voice detected, starting recording");
+            setIsVadListening(true); // Update UI immediately
             startRecording();
           }
         },
         () => {
           if (isRecording.value && !isProcessing.value) {
             console.log("🎙️ VAD: Voice ended, stopping recording");
+            setIsVadListening(false); // Update UI immediately
             stopRecording();
           }
         },
@@ -167,6 +170,7 @@ export default function VoiceRecorder(): JSX.Element {
     }
 
     setIsVadEnabled(false);
+    setIsVadListening(false);
     setCurrentVolume(0);
     updateStatus("🎙️ Auto-detect OFF");
   }
@@ -192,6 +196,7 @@ export default function VoiceRecorder(): JSX.Element {
       // Use existing stream if VAD is enabled, otherwise create new one
       let recordingStream = stream;
       if (!recordingStream) {
+        console.log("📹 Creating new media stream for recording");
         recordingStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             sampleRate: 16000,
@@ -200,10 +205,27 @@ export default function VoiceRecorder(): JSX.Element {
             noiseSuppression: true,
           },
         });
+      } else {
+        console.log("📹 Using existing VAD stream for recording");
       }
 
+      // Verify stream is active
+      const audioTracks = recordingStream.getAudioTracks();
+      console.log(`📹 Audio tracks: ${audioTracks.length}`);
+      audioTracks.forEach((track, index) => {
+        console.log(
+          `📹 Track ${index}: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}`,
+        );
+      });
+
+      // Determine MIME type support
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+
       const recorder = new MediaRecorder(recordingStream, {
-        mimeType: "audio/webm",
+        mimeType: mimeType,
+        audioBitsPerSecond: 128000, // 128 kbps
       });
 
       const chunks: Blob[] = [];
@@ -218,6 +240,7 @@ export default function VoiceRecorder(): JSX.Element {
       };
 
       recorder.onstop = () => {
+        console.log(`📼 Recording stopped. Total chunks: ${chunks.length}`);
         // Add a delay to ensure all chunks are collected
         setTimeout(() => {
           processRecording(chunks);
@@ -228,7 +251,17 @@ export default function VoiceRecorder(): JSX.Element {
         }, 100); // 100ms delay to collect final chunks
       };
 
-      recorder.start();
+      recorder.onerror = (event) => {
+        console.error("❌ MediaRecorder error:", event);
+      };
+
+      recorder.onstart = () => {
+        console.log("✅ MediaRecorder started, state:", recorder.state);
+      };
+
+      // Start recording with timeslice to get regular chunks
+      recorder.start(100); // Get data every 100ms
+      console.log("📼 Called recorder.start(), state:", recorder.state);
       setMediaRecorder(recorder);
       setAudioChunks(chunks);
       isRecording.value = true;
@@ -723,7 +756,7 @@ export default function VoiceRecorder(): JSX.Element {
 
           {isVadEnabled && (
             <div style={{ flex: 1, fontSize: "14px", opacity: 0.9 }}>
-              {isRecording.value
+              {isVadListening || isRecording.value
                 ? "🔴 Listening..."
                 : "💤 Waiting for voice..."}
             </div>
