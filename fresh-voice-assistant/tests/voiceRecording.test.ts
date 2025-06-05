@@ -2,6 +2,30 @@
 
 import { assertEquals, assertExists } from "https://deno.land/std@0.213.0/assert/mod.ts";
 
+// Mock MediaStream if not available
+if (typeof MediaStream === 'undefined') {
+  // @ts-ignore - Mocking for tests
+  globalThis.MediaStream = class MockMediaStream {
+    id = crypto.randomUUID();
+    active = true;
+    
+    getAudioTracks() {
+      return [{
+        kind: "audio",
+        id: crypto.randomUUID(),
+        label: "Mock Audio Track",
+        enabled: true,
+        muted: false,
+        stop: () => {},
+      }];
+    }
+    
+    getTracks() {
+      return this.getAudioTracks();
+    }
+  };
+}
+
 // Test utilities for voice recording logic
 
 // Simulate the recording logic with proper state management
@@ -11,6 +35,7 @@ class VoiceRecordingSimulator {
   private isProcessing = false;
   private chunks: Blob[] = [];
   private isRecorderActive = false;
+  private processingTimeout: number | null = null;
 
   async startRecording(stream: MediaStream): Promise<void> {
     // Don't start if already recording or processing
@@ -53,9 +78,10 @@ class VoiceRecordingSimulator {
       console.log(`📼 Recording stopped. Total chunks: ${this.chunks.length}`);
       
       // Simulate processing delay
-      setTimeout(() => {
+      this.processingTimeout = setTimeout(() => {
         this.processRecording(this.chunks);
-      }, 100);
+        this.processingTimeout = null;
+      }, 100) as unknown as number;
     };
 
     // Start recording with timeslice
@@ -105,12 +131,24 @@ class VoiceRecordingSimulator {
   getIsRecording(): boolean {
     return this.isRecording;
   }
+
+  cleanup(): void {
+    if (this.processingTimeout) {
+      clearTimeout(this.processingTimeout);
+      this.processingTimeout = null;
+    }
+    if (this.mediaRecorder) {
+      this.mediaRecorder.stop();
+      this.mediaRecorder = null;
+    }
+  }
 }
 
 // Mock MediaRecorder for testing
 class MockMediaRecorder {
   state: RecordingState = "inactive";
   private timesliceInterval?: number;
+  private static activeRecorders = new Set<MockMediaRecorder>();
   ondataavailable?: (event: BlobEvent) => void;
   onstop?: () => void;
 
@@ -125,6 +163,7 @@ class MockMediaRecorder {
     }
     
     this.state = "recording";
+    MockMediaRecorder.activeRecorders.add(this);
 
     // Simulate data generation
     if (timeslice && timeslice > 0) {
@@ -143,6 +182,7 @@ class MockMediaRecorder {
     }
 
     this.state = "inactive";
+    MockMediaRecorder.activeRecorders.delete(this);
     
     if (this.timesliceInterval) {
       clearInterval(this.timesliceInterval);
@@ -153,6 +193,14 @@ class MockMediaRecorder {
       this.onstop();
     }
   }
+
+  static cleanup() {
+    // Clean up any remaining active recorders
+    for (const recorder of this.activeRecorders) {
+      recorder.stop();
+    }
+    this.activeRecorders.clear();
+  }
 }
 
 // Tests
@@ -160,79 +208,99 @@ Deno.test("VoiceRecording - no infinite chunk loop after stop", async () => {
   const simulator = new VoiceRecordingSimulator();
   const mockStream = new MediaStream();
 
-  // Start recording
-  await simulator.startRecording(mockStream);
-  assertEquals(simulator.getIsRecording(), true);
+  try {
+    // Start recording
+    await simulator.startRecording(mockStream);
+    assertEquals(simulator.getIsRecording(), true);
 
-  // Wait for some chunks
-  await new Promise(resolve => setTimeout(resolve, 350));
+    // Wait for some chunks
+    await new Promise(resolve => setTimeout(resolve, 350));
 
-  // Stop recording
-  simulator.stopRecording();
-  assertEquals(simulator.getIsRecording(), false);
+    // Stop recording
+    simulator.stopRecording();
+    assertEquals(simulator.getIsRecording(), false);
 
-  // Get chunk count immediately after stop
-  const chunkCountAtStop = simulator.getChunkCount();
+    // Get chunk count immediately after stop
+    const chunkCountAtStop = simulator.getChunkCount();
 
-  // Wait to ensure no more chunks arrive
-  await new Promise(resolve => setTimeout(resolve, 200));
+    // Wait to ensure no more chunks arrive
+    await new Promise(resolve => setTimeout(resolve, 200));
 
-  // Chunk count should not have increased
-  const chunkCountAfterWait = simulator.getChunkCount();
-  assertEquals(chunkCountAtStop, chunkCountAfterWait);
+    // Chunk count should not have increased
+    const chunkCountAfterWait = simulator.getChunkCount();
+    assertEquals(chunkCountAtStop, chunkCountAfterWait);
+  } finally {
+    simulator.cleanup();
+    MockMediaRecorder.cleanup();
+  }
 });
 
 Deno.test("VoiceRecording - prevents multiple simultaneous recordings", async () => {
   const simulator = new VoiceRecordingSimulator();
   const mockStream = new MediaStream();
 
-  // Start first recording
-  await simulator.startRecording(mockStream);
-  assertEquals(simulator.getIsRecording(), true);
+  try {
+    // Start first recording
+    await simulator.startRecording(mockStream);
+    assertEquals(simulator.getIsRecording(), true);
 
-  // Try to start another recording - should be ignored
-  await simulator.startRecording(mockStream);
-  
-  // Should still be in recording state from first call
-  assertEquals(simulator.getIsRecording(), true);
+    // Try to start another recording - should be ignored
+    await simulator.startRecording(mockStream);
+    
+    // Should still be in recording state from first call
+    assertEquals(simulator.getIsRecording(), true);
 
-  // Stop recording
-  simulator.stopRecording();
+    // Stop recording
+    simulator.stopRecording();
+  } finally {
+    simulator.cleanup();
+    MockMediaRecorder.cleanup();
+  }
 });
 
 Deno.test("VoiceRecording - handles rapid start/stop cycles", async () => {
   const simulator = new VoiceRecordingSimulator();
   const mockStream = new MediaStream();
 
-  // Rapid start/stop cycle
-  await simulator.startRecording(mockStream);
-  simulator.stopRecording();
-  
-  // Small delay
-  await new Promise(resolve => setTimeout(resolve, 50));
-  
-  // Start again
-  await simulator.startRecording(mockStream);
-  assertEquals(simulator.getIsRecording(), true);
-  
-  // Stop again
-  simulator.stopRecording();
-  assertEquals(simulator.getIsRecording(), false);
+  try {
+    // Rapid start/stop cycle
+    await simulator.startRecording(mockStream);
+    simulator.stopRecording();
+    
+    // Small delay
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    // Start again
+    await simulator.startRecording(mockStream);
+    assertEquals(simulator.getIsRecording(), true);
+    
+    // Stop again
+    simulator.stopRecording();
+    assertEquals(simulator.getIsRecording(), false);
+  } finally {
+    simulator.cleanup();
+    MockMediaRecorder.cleanup();
+  }
 });
 
 Deno.test("VoiceRecording - validates minimum audio size", async () => {
   const simulator = new VoiceRecordingSimulator();
   const mockStream = new MediaStream();
 
-  // Start recording
-  await simulator.startRecording(mockStream);
+  try {
+    // Start recording
+    await simulator.startRecording(mockStream);
 
-  // Stop immediately (will have very few chunks)
-  simulator.stopRecording();
+    // Stop immediately (will have very few chunks)
+    simulator.stopRecording();
 
-  // Wait for processing
-  await new Promise(resolve => setTimeout(resolve, 150));
+    // Wait for processing
+    await new Promise(resolve => setTimeout(resolve, 150));
 
-  // Should have handled the small audio gracefully
-  assertEquals(simulator.getIsRecording(), false);
+    // Should have handled the small audio gracefully
+    assertEquals(simulator.getIsRecording(), false);
+  } finally {
+    simulator.cleanup();
+    MockMediaRecorder.cleanup();
+  }
 });

@@ -124,7 +124,12 @@ Deno.test("VoiceActivityDetector - start and stop", async () => {
   const vad = new VoiceActivityDetector(
     mockContext,
     () => { voiceStartCalled = true; },
-    () => { voiceEndCalled = true; }
+    () => { voiceEndCalled = true; },
+    {
+      voiceThreshold: 30,
+      silenceDelay: 100, // Short delay for testing
+      minSpeechDuration: 50, // Short duration for testing
+    }
   );
   
   // Start VAD
@@ -133,8 +138,11 @@ Deno.test("VoiceActivityDetector - start and stop", async () => {
   // Add small delay to let VAD initialize
   await new Promise(resolve => setTimeout(resolve, 50));
   
-  // Stop VAD
+  // Stop VAD - this should clean up all timers
   vad.stop();
+  
+  // Add small delay to ensure cleanup is complete
+  await new Promise(resolve => setTimeout(resolve, 50));
   
   // Volume should be 0 after stopping
   assertEquals(vad.getCurrentVolume(), 0);
@@ -191,16 +199,19 @@ Deno.test("VoiceActivityDetector - voice detection simulation", async () => {
   // Start VAD
   vad.start(mockStream);
   
-  // Simulate voice detection
+  // Simulate voice detection for a short time
   simulateVoice = true;
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await new Promise(resolve => setTimeout(resolve, 100));
   
   // Simulate silence
   simulateVoice = false;
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await new Promise(resolve => setTimeout(resolve, 100));
   
-  // Stop VAD
+  // Stop VAD - this should clean up all timers
   vad.stop();
+  
+  // Add delay to ensure cleanup is complete
+  await new Promise(resolve => setTimeout(resolve, 100));
   
   // We can't easily test the actual callbacks due to requestAnimationFrame
   // but we can verify the VAD doesn't crash
