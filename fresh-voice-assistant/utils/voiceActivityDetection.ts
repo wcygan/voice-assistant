@@ -25,6 +25,10 @@ export class VoiceActivityDetector {
 
   private speechStartTime: number | null = null;
   private isSpeaking = false;
+  private lastVoiceEndTime = 0;
+  private debugInterval: number | null = null;
+  private volumeHistory: number[] = [];
+  private historySize = 10;
 
   constructor(
     audioContext: AudioContext,
@@ -52,11 +56,26 @@ export class VoiceActivityDetector {
 
   start(stream: MediaStream): void {
     try {
+      console.log("🎤 Starting VAD with stream:", stream);
+      console.log("🎤 Audio tracks:", stream.getAudioTracks());
+
       // Create microphone source
       this.microphone = this.audioContext.createMediaStreamSource(stream);
+
+      // Connect to analyser
       this.microphone.connect(this.analyser);
 
+      // Also connect to destination to ensure audio flows
+      // (disconnect later if we don't want to hear ourselves)
+      // this.analyser.connect(this.audioContext.destination);
+
+      console.log("🎤 Analyser connected, fftSize:", this.analyser.fftSize);
+      console.log("🎤 Frequency bin count:", this.analyser.frequencyBinCount);
+
       this.isListening = true;
+
+      // Reduced debug logging - only log significant events
+
       this.detectVoice();
     } catch (error) {
       console.error("Failed to start VAD:", error);
@@ -66,6 +85,11 @@ export class VoiceActivityDetector {
 
   stop(): void {
     this.isListening = false;
+
+    if (this.debugInterval) {
+      clearInterval(this.debugInterval);
+      this.debugInterval = null;
+    }
 
     if (this.silenceTimeout) {
       clearTimeout(this.silenceTimeout);
@@ -99,10 +123,12 @@ export class VoiceActivityDetector {
     for (let i = 0; i < this.dataArray.length; i++) {
       sum += this.dataArray[i];
 
-      // Focus on voice frequency range
+      // Focus on voice frequency range (human speech fundamentals)
       const freq = i * binHz;
       if (freq >= 85 && freq <= 3000) {
-        voiceSum += this.dataArray[i];
+        // Apply frequency weighting for voice fundamentals (100-1000Hz)
+        const weight = freq >= 100 && freq <= 1000 ? 1.5 : 1.0;
+        voiceSum += this.dataArray[i] * weight;
       }
     }
 
@@ -112,8 +138,18 @@ export class VoiceActivityDetector {
     // Use voice-focused average for better detection
     const effectiveVolume = Math.max(averageVolume, voiceAverage * 0.8);
 
-    // Check if voice is detected
-    const isVoiceDetected = effectiveVolume > this.config.voiceThreshold;
+    // Add to volume history for smoothing
+    this.volumeHistory.push(effectiveVolume);
+    if (this.volumeHistory.length > this.historySize) {
+      this.volumeHistory.shift();
+    }
+
+    // Calculate smoothed volume (moving average)
+    const smoothedVolume = this.volumeHistory.reduce((a, b) => a + b, 0) /
+      this.volumeHistory.length;
+
+    // Check if voice is detected using smoothed volume
+    const isVoiceDetected = smoothedVolume > this.config.voiceThreshold;
 
     if (isVoiceDetected && !this.isSpeaking) {
       // Voice started
@@ -134,8 +170,15 @@ export class VoiceActivityDetector {
   }
 
   private handleVoiceStart(): void {
+    // Prevent rapid start after end (cooldown period)
+    const timeSinceLastEnd = Date.now() - this.lastVoiceEndTime;
+    if (timeSinceLastEnd < 1000) { // Increased cooldown to 1 second
+      return;
+    }
+
     this.isSpeaking = true;
     this.speechStartTime = Date.now();
+    console.log("✅ Voice started at", new Date().toLocaleTimeString());
     this.voiceStartCallback();
 
     // Clear any existing silence timeout
@@ -155,9 +198,12 @@ export class VoiceActivityDetector {
           Date.now() - this.speechStartTime >= this.config.minSpeechDuration
         ) {
           this.isSpeaking = false;
+          this.lastVoiceEndTime = Date.now();
+          console.log("✅ Voice ended at", new Date().toLocaleTimeString());
           this.voiceEndCallback();
         } else {
           // Too short, ignore it
+          console.log("🚫 Speech too short, ignoring");
           this.isSpeaking = false;
         }
         this.silenceTimeout = null;
@@ -169,29 +215,35 @@ export class VoiceActivityDetector {
   getCurrentVolume(): number {
     if (!this.isListening) return 0;
 
-    this.analyser.getByteFrequencyData(this.dataArray);
+    // Try time domain data for debugging
+    const timeData = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteTimeDomainData(timeData);
 
-    // Use same calculation as detectVoice for consistency
+    // Calculate RMS volume from time domain
     let sum = 0;
-    let voiceSum = 0;
-    const nyquist = this.audioContext.sampleRate / 2;
-    const binHz = nyquist / this.analyser.frequencyBinCount;
+    for (let i = 0; i < timeData.length; i++) {
+      const normalized = (timeData[i] - 128) / 128; // Normalize to -1 to 1
+      sum += normalized * normalized;
+    }
+    const rms = Math.sqrt(sum / timeData.length);
+    const _rmsVolume = rms * 255; // Scale to 0-255
+
+    // Also try frequency data
+    this.analyser.getByteFrequencyData(this.dataArray);
+    let freqSum = 0;
+    let maxFreq = 0;
 
     for (let i = 0; i < this.dataArray.length; i++) {
-      sum += this.dataArray[i];
-
-      // Focus on voice frequency range
-      const freq = i * binHz;
-      if (freq >= 85 && freq <= 3000) {
-        voiceSum += this.dataArray[i];
-      }
+      freqSum += this.dataArray[i];
+      maxFreq = Math.max(maxFreq, this.dataArray[i]);
     }
 
-    const averageVolume = sum / this.dataArray.length;
-    const voiceAverage = voiceSum / (3000 / binHz);
+    const freqAverage = freqSum / this.dataArray.length;
 
-    // Return the voice-focused average
-    return Math.max(averageVolume, voiceAverage * 0.8);
+    // Removed verbose logging - audio detection is working
+
+    // Use frequency average for now
+    return freqAverage;
   }
 
   // Update configuration

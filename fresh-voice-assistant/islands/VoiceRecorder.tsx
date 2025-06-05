@@ -95,34 +95,28 @@ export default function VoiceRecorder(): JSX.Element {
         }
       }
 
-      // Get microphone stream
+      // Get microphone stream with simpler constraints
       const micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          sampleRate: 16000,
-          channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
         },
       });
+
+      // Microphone stream obtained successfully
+
       setStream(micStream);
 
       // Create VAD instance
       const vadInstance = new VoiceActivityDetector(
         audioContext!,
         () => {
-          console.log("🎤 Voice detected - starting recording");
-          console.log(
-            `Recording: ${isRecording.value}, Processing: ${isProcessing.value}`,
-          );
           if (!isRecording.value && !isProcessing.value) {
             startRecording();
           }
         },
         () => {
-          console.log("🔇 Silence detected - stopping recording");
-          console.log(
-            `Recording: ${isRecording.value}, Processing: ${isProcessing.value}`,
-          );
           if (isRecording.value && !isProcessing.value) {
             stopRecording();
           }
@@ -143,16 +137,6 @@ export default function VoiceRecorder(): JSX.Element {
         if (vadInstance) {
           const volume = vadInstance.getCurrentVolume();
           setCurrentVolume(volume);
-          // Debug logging
-          if (volume > 0) {
-            console.log(
-              `📊 Volume: ${
-                Math.round(volume)
-              }, Threshold: ${vadSensitivity}, Active: ${
-                volume > vadSensitivity
-              }`,
-            );
-          }
         }
       }, 50); // Update every 50ms for smoother visualization
 
@@ -196,12 +180,9 @@ export default function VoiceRecorder(): JSX.Element {
         const win = globalThis as unknown as Window;
         const ctx = new (win.AudioContext || win.webkitAudioContext)();
         setAudioContext(ctx);
-        console.log("🔍 DEBUG: Audio context created, state:", ctx.state);
-
         // Resume audio context if suspended
         if (ctx.state === "suspended") {
           await ctx.resume();
-          console.log("🔍 DEBUG: Audio context resumed");
         }
       }
 
@@ -253,7 +234,6 @@ export default function VoiceRecorder(): JSX.Element {
 
   function stopRecording() {
     if (mediaRecorder && isRecording.value) {
-      console.log("🛑 Stopping recording...");
       mediaRecorder.stop();
       isRecording.value = false;
       updateStatus(
@@ -261,8 +241,6 @@ export default function VoiceRecorder(): JSX.Element {
           ? "🎙️ Auto-detect ON - Waiting..."
           : "✅ Recording stopped",
       );
-    } else {
-      console.log("⚠️ Tried to stop recording but not recording");
     }
   }
 
