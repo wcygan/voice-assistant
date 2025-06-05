@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.window"],
+    "strict": true
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 80,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve",
+    "include": ["scripts/"],
+    "exclude": []
+  },
+  "lint": {
+    "include": ["scripts/"],
+    "exclude": [],
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "tasks": {
+    "setup": "deno run --allow-all scripts/setup.ts",
+    "setup:stt": "deno run --allow-all scripts/setup.ts stt-all",
+    "setup:tts": "deno run --allow-all scripts/setup.ts tts-all",
+    "setup:all": "deno run --allow-all scripts/setup.ts all",
+    "fmt": "deno fmt scripts/",
+    "lint": "deno lint scripts/",
+    "check": "deno check scripts/**/*.ts"
+  },
+  "imports": {
+    "@dax": "https://deno.land/x/dax@0.39.2/mod.ts"
+  }
+}
