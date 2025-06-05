@@ -22,8 +22,10 @@ brew install ffmpeg python@3.11
 # 3. Set up models (interactive menu)
 deno task setup
 
-# 4. Test the pipeline
-deno task test:roundtrip
+# 4. Try the demos
+deno task demo:tts --showcase    # See TTS in action
+deno task demo:stt --sample      # Try STT with sample audio
+deno task test:roundtrip         # Full pipeline test
 ```
 
 ## Development Environment Setup
@@ -71,7 +73,21 @@ deno task test:roundtrip
 The voice assistant follows this flow:
 - User provides voice input → STT model transcribes to text → LLM processes and generates response → TTS synthesizes audio output
 
-## Testing
+## Demos & Testing
+
+### Quick Demos
+Showcase individual technologies to users:
+```bash
+# TTS Demo - Text to Speech
+deno task demo:tts --showcase           # Multiple examples
+deno task demo:tts --interactive        # Interactive mode
+deno task demo:tts --text "Hello!"      # Single synthesis
+
+# STT Demo - Speech to Text  
+deno task demo:stt --sample             # Generate & transcribe sample
+deno task demo:stt --input audio.wav    # Transcribe your audio
+deno task demo:stt --input audio.wav --model large  # High accuracy
+```
 
 ### Round-Trip Testing
 Test the complete STT→TTS pipeline:
