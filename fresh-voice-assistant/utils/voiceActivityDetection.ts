@@ -90,15 +90,30 @@ export class VoiceActivityDetector {
     // Get frequency data
     this.analyser.getByteFrequencyData(this.dataArray);
 
-    // Calculate average volume
+    // Calculate average volume with focus on voice frequencies (85Hz - 3kHz)
     let sum = 0;
+    let voiceSum = 0;
+    const nyquist = this.audioContext.sampleRate / 2;
+    const binHz = nyquist / this.analyser.frequencyBinCount;
+
     for (let i = 0; i < this.dataArray.length; i++) {
       sum += this.dataArray[i];
+
+      // Focus on voice frequency range
+      const freq = i * binHz;
+      if (freq >= 85 && freq <= 3000) {
+        voiceSum += this.dataArray[i];
+      }
     }
+
     const averageVolume = sum / this.dataArray.length;
+    const voiceAverage = voiceSum / (3000 / binHz); // Average in voice range
+
+    // Use voice-focused average for better detection
+    const effectiveVolume = Math.max(averageVolume, voiceAverage * 0.8);
 
     // Check if voice is detected
-    const isVoiceDetected = averageVolume > this.config.voiceThreshold;
+    const isVoiceDetected = effectiveVolume > this.config.voiceThreshold;
 
     if (isVoiceDetected && !this.isSpeaking) {
       // Voice started
@@ -155,11 +170,28 @@ export class VoiceActivityDetector {
     if (!this.isListening) return 0;
 
     this.analyser.getByteFrequencyData(this.dataArray);
+
+    // Use same calculation as detectVoice for consistency
     let sum = 0;
+    let voiceSum = 0;
+    const nyquist = this.audioContext.sampleRate / 2;
+    const binHz = nyquist / this.analyser.frequencyBinCount;
+
     for (let i = 0; i < this.dataArray.length; i++) {
       sum += this.dataArray[i];
+
+      // Focus on voice frequency range
+      const freq = i * binHz;
+      if (freq >= 85 && freq <= 3000) {
+        voiceSum += this.dataArray[i];
+      }
     }
-    return sum / this.dataArray.length;
+
+    const averageVolume = sum / this.dataArray.length;
+    const voiceAverage = voiceSum / (3000 / binHz);
+
+    // Return the voice-focused average
+    return Math.max(averageVolume, voiceAverage * 0.8);
   }
 
   // Update configuration

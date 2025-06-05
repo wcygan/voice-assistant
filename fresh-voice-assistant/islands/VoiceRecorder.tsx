@@ -111,12 +111,18 @@ export default function VoiceRecorder(): JSX.Element {
         audioContext!,
         () => {
           console.log("🎤 Voice detected - starting recording");
+          console.log(
+            `Recording: ${isRecording.value}, Processing: ${isProcessing.value}`,
+          );
           if (!isRecording.value && !isProcessing.value) {
             startRecording();
           }
         },
         () => {
           console.log("🔇 Silence detected - stopping recording");
+          console.log(
+            `Recording: ${isRecording.value}, Processing: ${isProcessing.value}`,
+          );
           if (isRecording.value && !isProcessing.value) {
             stopRecording();
           }
@@ -132,12 +138,23 @@ export default function VoiceRecorder(): JSX.Element {
       setVad(vadInstance);
       setIsVadEnabled(true);
 
-      // Start monitoring volume levels
+      // Start monitoring volume levels with faster updates
       volumeIntervalRef.current = setInterval(() => {
         if (vadInstance) {
-          setCurrentVolume(vadInstance.getCurrentVolume());
+          const volume = vadInstance.getCurrentVolume();
+          setCurrentVolume(volume);
+          // Debug logging
+          if (volume > 0) {
+            console.log(
+              `📊 Volume: ${
+                Math.round(volume)
+              }, Threshold: ${vadSensitivity}, Active: ${
+                volume > vadSensitivity
+              }`,
+            );
+          }
         }
-      }, 100);
+      }, 50); // Update every 50ms for smoother visualization
 
       updateStatus("🎙️ Auto-detect ON - Start speaking...");
     } catch (error) {
@@ -236,8 +253,16 @@ export default function VoiceRecorder(): JSX.Element {
 
   function stopRecording() {
     if (mediaRecorder && isRecording.value) {
+      console.log("🛑 Stopping recording...");
       mediaRecorder.stop();
       isRecording.value = false;
+      updateStatus(
+        isVadEnabled
+          ? "🎙️ Auto-detect ON - Waiting..."
+          : "✅ Recording stopped",
+      );
+    } else {
+      console.log("⚠️ Tried to stop recording but not recording");
     }
   }
 
@@ -325,6 +350,12 @@ export default function VoiceRecorder(): JSX.Element {
       setError("❌ Network error: " + err.message);
     } finally {
       isProcessing.value = false;
+      isRecording.value = false; // Ensure recording state is reset
+
+      // Reset status for VAD mode
+      if (isVadEnabled) {
+        updateStatus("🎙️ Auto-detect ON - Start speaking...");
+      }
     }
   }
 
@@ -663,6 +694,88 @@ export default function VoiceRecorder(): JSX.Element {
         {/* Volume Meter */}
         {isVadEnabled && (
           <div style={{ marginTop: "10px" }}>
+            {/* Voice Level Bars */}
+            <div style={{ marginBottom: "15px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  fontSize: "12px",
+                  marginBottom: "5px",
+                }}
+              >
+                <span>Voice Level:</span>
+                <div
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "flex-end",
+                    gap: "2px",
+                    height: "40px",
+                    padding: "0 10px",
+                    backgroundColor: "rgba(0, 0, 0, 0.2)",
+                    borderRadius: "5px",
+                  }}
+                >
+                  {/* Create 20 bars for visualization */}
+                  {Array.from({ length: 20 }, (_, i) => {
+                    const barActive = (currentVolume / 255) * 20 > i;
+                    const isThresholdBar =
+                      Math.floor((vadSensitivity / 255) * 20) === i;
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          flex: 1,
+                          height: `${((i + 1) / 20) * 100}%`,
+                          backgroundColor: isThresholdBar
+                            ? "#FFF"
+                            : barActive
+                            ? (currentVolume > vadSensitivity
+                              ? "#4CAF50"
+                              : "#FFA500")
+                            : "rgba(255, 255, 255, 0.1)",
+                          borderRadius: "2px",
+                          transition: "background-color 0.1s ease",
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <span
+                  style={{
+                    minWidth: "40px",
+                    textAlign: "right",
+                    fontWeight: currentVolume > vadSensitivity
+                      ? "bold"
+                      : "normal",
+                    color: currentVolume > vadSensitivity
+                      ? "#4CAF50"
+                      : "inherit",
+                  }}
+                >
+                  {Math.round(currentVolume)}
+                </span>
+              </div>
+
+              {/* Status text */}
+              <div
+                style={{
+                  fontSize: "11px",
+                  opacity: 0.7,
+                  textAlign: "center",
+                }}
+              >
+                {currentVolume === 0
+                  ? "No audio detected"
+                  : currentVolume > vadSensitivity
+                  ? "Voice detected! 🎤"
+                  : "Background noise"}
+              </div>
+            </div>
+
+            {/* Original volume bar */}
             <div
               style={{
                 display: "flex",
@@ -672,13 +785,13 @@ export default function VoiceRecorder(): JSX.Element {
                 marginBottom: "5px",
               }}
             >
-              <span>Volume:</span>
+              <span>Threshold:</span>
               <div
                 style={{
                   flex: 1,
-                  height: "20px",
+                  height: "10px",
                   backgroundColor: "rgba(0, 0, 0, 0.3)",
-                  borderRadius: "10px",
+                  borderRadius: "5px",
                   overflow: "hidden",
                   position: "relative",
                 }}
@@ -690,7 +803,7 @@ export default function VoiceRecorder(): JSX.Element {
                     backgroundColor: currentVolume > vadSensitivity
                       ? "#4CAF50"
                       : "#666",
-                    transition: "width 0.1s ease, background-color 0.3s ease",
+                    transition: "width 0.05s ease, background-color 0.2s ease",
                   }}
                 >
                 </div>
@@ -702,7 +815,7 @@ export default function VoiceRecorder(): JSX.Element {
                     bottom: 0,
                     width: "2px",
                     backgroundColor: "#FFF",
-                    opacity: 0.7,
+                    opacity: 0.9,
                   }}
                 >
                 </div>
