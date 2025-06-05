@@ -8,9 +8,7 @@ export default function AudioVisualizer(): JSX.Element {
 
   return (
     <div class="audio-visualizer">
-      {Array.from({ length: 8 }, (_, i) => (
-        <div key={i} class="bar"></div>
-      ))}
+      {Array.from({ length: 8 }, (_, i) => <div key={i} class="bar"></div>)}
     </div>
   );
 }

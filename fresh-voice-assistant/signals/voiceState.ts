@@ -20,42 +20,50 @@ export interface ConversationMessage {
 export const conversationHistory = signal<ConversationMessage[]>([
   {
     type: "ai",
-    text: "👋 Hi! I'm your voice assistant. Click the microphone button and start speaking to have a conversation with me.",
-    timestamp: new Date()
-  }
+    text:
+      "👋 Hi! I'm your voice assistant. Click the microphone button and start speaking to have a conversation with me.",
+    timestamp: new Date(),
+  },
 ]);
 
 // Model and configuration state
 export const selectedModels = signal({
   llm: "mistral-small3.1:latest",
   whisper: "base",
-  tts: "server", // Will be "server" or "client" when we add Transformers.js
+  tts: "server", // Only server TTS (Coqui) for now
 });
 
 export const systemPrompts = signal({
-  current: "You are a helpful voice assistant. Keep responses very brief and conversational, ideally 1-2 sentences.",
+  current:
+    "You are a helpful voice assistant. Keep responses very brief and conversational, ideally 1-2 sentences.",
   options: [
     {
       name: "Helpful Assistant",
-      prompt: "You are a helpful voice assistant. Keep responses very brief and conversational, ideally 1-2 sentences."
+      prompt:
+        "You are a helpful voice assistant. Keep responses very brief and conversational, ideally 1-2 sentences.",
     },
     {
-      name: "Coding Assistant", 
-      prompt: "You are a friendly coding assistant. Help with programming questions and keep responses concise."
+      name: "Coding Assistant",
+      prompt:
+        "You are a friendly coding assistant. Help with programming questions and keep responses concise.",
     },
     {
       name: "Creative Writer",
-      prompt: "You are a creative writing assistant. Help with stories, ideas, and creative projects."
+      prompt:
+        "You are a creative writing assistant. Help with stories, ideas, and creative projects.",
     },
     {
       name: "Wise Mentor",
-      prompt: "You are a wise mentor. Provide thoughtful advice and insights in 1-2 sentences."
-    }
-  ]
+      prompt:
+        "You are a wise mentor. Provide thoughtful advice and insights in 1-2 sentences.",
+    },
+  ],
 });
 
 // Available models (populated from API)
-export const availableModels = signal<any[]>([]);
+export const availableModels = signal<{ name: string; modified_at: string }[]>(
+  [],
+);
 
 // Error state
 export const errorMessage = signal<string | null>(null);
@@ -65,9 +73,9 @@ export function addMessage(type: "user" | "ai", text: string) {
   const newMessage: ConversationMessage = {
     type,
     text,
-    timestamp: new Date()
+    timestamp: new Date(),
   };
-  
+
   conversationHistory.value = [...conversationHistory.value, newMessage];
 }
 

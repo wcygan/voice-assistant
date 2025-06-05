@@ -7,7 +7,7 @@ export default function VoiceInterface(): JSX.Element {
   return (
     <div class="voice-interface">
       <VoiceRecorder />
-      
+
       <div class="status" id="status">
         {currentStatus.value}
       </div>

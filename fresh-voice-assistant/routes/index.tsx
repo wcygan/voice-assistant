@@ -8,9 +8,9 @@ import { availableModels } from "../signals/voiceState.ts";
 export default function Home() {
   // Load available models on page load
   useEffect(() => {
-    fetch('/api/models')
-      .then(res => res.json())
-      .then(data => {
+    fetch("/api/models")
+      .then((res) => res.json())
+      .then((data) => {
         if (data.success) {
           availableModels.value = data.models;
         }
@@ -22,10 +22,13 @@ export default function Home() {
     <>
       <Head>
         <title>🎤 Voice Assistant - Fresh</title>
-        <meta name="description" content="AI-powered voice assistant with speech recognition and synthesis" />
+        <meta
+          name="description"
+          content="AI-powered voice assistant with speech recognition and synthesis"
+        />
         <link rel="stylesheet" href="/voice-assistant.css" />
       </Head>
-      
+
       <div class="container">
         <h1>🎤 Voice Assistant</h1>
         <p class="subtitle">Speak naturally and get AI-powered responses</p>
@@ -35,13 +38,16 @@ export default function Home() {
         <SettingsPanel />
 
         <div class="instructions">
-          <strong>How to use:</strong><br />
+          <strong>How to use:</strong>
+          <br />
           1. Click the microphone button<br />
           2. Speak your question clearly<br />
           3. Click again to stop recording<br />
           4. Listen to the AI response<br />
           <br />
-          <strong>Tips:</strong> Speak clearly, minimize background noise, and keep questions concise for best results.
+          <strong>Tips:</strong>{" "}
+          Speak clearly, minimize background noise, and keep questions concise
+          for best results.
         </div>
       </div>
     </>

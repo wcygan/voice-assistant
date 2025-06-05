@@ -1,6 +1,7 @@
 # 🎤 Voice Assistant - Fresh Edition
 
-A modern AI-powered voice assistant built with Fresh framework, featuring speech recognition, LLM conversation, and text-to-speech synthesis.
+A modern AI-powered voice assistant built with Fresh framework, featuring speech
+recognition, LLM conversation, and text-to-speech synthesis.
 
 ## ✨ Features
 
@@ -15,6 +16,7 @@ A modern AI-powered voice assistant built with Fresh framework, featuring speech
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Deno 2.0+
 - Python virtual environment with Whisper and Coqui TTS
 - Ollama running locally with models
@@ -41,6 +43,7 @@ The application will be available at: **http://localhost:8001**
 ## 📊 System Architecture
 
 ### Fresh Framework Structure
+
 ```
 fresh-voice-assistant/
 ├── routes/
@@ -60,6 +63,7 @@ fresh-voice-assistant/
 ```
 
 ### Voice Processing Pipeline
+
 1. **Browser Recording**: WebRTC → WebM audio
 2. **Server Processing**: WebM → WAV → Whisper → LLM → TTS
 3. **Audio Response**: Base64 encoded audio → Browser playback
@@ -67,9 +71,11 @@ fresh-voice-assistant/
 ## 🛠️ API Endpoints
 
 ### POST `/api/voice`
+
 Process voice input and return AI response with audio.
 
 **Request:**
+
 ```json
 {
   "audio": "base64_encoded_webm_audio",
@@ -80,6 +86,7 @@ Process voice input and return AI response with audio.
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -90,35 +97,44 @@ Process voice input and return AI response with audio.
 ```
 
 ### GET `/api/health`
+
 Check system dependencies and service status.
 
 ### GET `/api/models`
+
 List available Ollama models.
 
 ## 🔧 Configuration
 
 ### Model Settings
+
 - **LLM Models**: Mistral Small, Llama2 Uncensored
 - **Whisper Models**: base (fast), small (better), medium (best)
-- **System Prompts**: Helpful Assistant, Coding Assistant, Creative Writer, Wise Mentor
+- **System Prompts**: Helpful Assistant, Coding Assistant, Creative Writer, Wise
+  Mentor
 
 ### Logging
-All voice processing activities are logged to `/tmp/fresh_voice_logs.txt` with timestamps and color-coded status messages.
+
+All voice processing activities are logged to `/tmp/fresh_voice_logs.txt` with
+timestamps and color-coded status messages.
 
 ## 🏗️ Development Roadmap
 
 ### ✅ Phase 1: Fresh Migration (COMPLETED)
+
 - Fresh framework implementation
 - Component-based architecture
 - API route conversion
 - Feature parity with original
 
 ### 🚧 Phase 2: Transformers.js Integration (IN PROGRESS)
+
 - Client-side TTS with browser models
 - Hybrid server/client processing
 - Performance optimization
 
 ### 📋 Phase 3: Enhanced Features (PLANNED)
+
 - Offline PWA capabilities
 - Advanced voice customization
 - Cross-browser optimization
@@ -148,6 +164,7 @@ curl -X POST http://localhost:8001/api/voice \
 ## 🤝 Contributing
 
 This application demonstrates modern web development with:
+
 - Fresh framework for optimal performance
 - Islands Architecture for minimal JavaScript
 - Preact Signals for reactive state management
