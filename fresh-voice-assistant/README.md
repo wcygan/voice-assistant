@@ -1,174 +1,91 @@
-# 🎤 Voice Assistant - Fresh Edition
+# Fresh Voice Assistant
 
-A modern AI-powered voice assistant built with Fresh framework, featuring speech
-recognition, LLM conversation, and text-to-speech synthesis.
+The modern web interface for the voice assistant, built with Deno Fresh framework.
 
-## ✨ Features
+## Features
 
-- **🎯 Fresh Framework**: Server-side rendering with Islands Architecture
-- **🗣️ Voice Recognition**: OpenAI Whisper for accurate speech-to-text
-- **🤖 AI Conversations**: Local LLM integration with Ollama (Mistral, Llama2)
-- **🔊 Text-to-Speech**: Coqui TTS for natural voice synthesis
-- **⚡ Real-time Processing**: WebM → WAV conversion with FFmpeg
-- **📱 Responsive UI**: Modern design with visual feedback
-- **🔧 Health Monitoring**: Comprehensive dependency checking
+- **Server-side rendering** with Islands Architecture
+- **Real-time voice recording** with WebRTC MediaRecorder
+- **Visual feedback** during recording and processing
+- **Conversation history** with auto-scroll
+- **Model selection** for STT, LLM, and TTS
+- **Customizable prompts** for different AI personalities
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Deno 2.0+
-- Python virtual environment with Whisper and Coqui TTS
-- Ollama running locally with models
-- FFmpeg for audio conversion
-
-### Running the Application
+## Quick Start
 
 ```bash
-# Start the development server
+# From the fresh-voice-assistant directory
 deno task start
 
-# View logs in real-time
-deno task logs
-
-# Check system health
-curl http://localhost:8001/api/health
-
-# View available models
-curl http://localhost:8001/api/models
+# Application runs on http://localhost:8001
 ```
 
-The application will be available at: **http://localhost:8001**
+## Prerequisites
 
-## 📊 System Architecture
+Make sure you've completed the main setup:
 
-### Fresh Framework Structure
+```bash
+# From the root directory
+cd ..
+deno task setup
+```
+
+## Architecture
 
 ```
 fresh-voice-assistant/
-├── routes/
-│   ├── index.tsx          # Main voice assistant page
-│   └── api/
-│       ├── voice.ts       # Voice processing endpoint
-│       ├── models.ts      # Available models API
-│       └── health.ts      # Health check endpoint
-├── components/
-│   ├── VoiceInterface.tsx # Main UI component
-│   ├── ConversationHistory.tsx
-│   └── SettingsPanel.tsx
-├── islands/
-│   └── VoiceRecorder.tsx  # Interactive recording component
-└── signals/
-    └── voiceState.ts      # Centralized state management
+├── routes/              # Pages and API endpoints
+│   ├── index.tsx       # Main UI page
+│   └── api/            # REST endpoints
+├── islands/            # Interactive components
+│   └── VoiceRecorder.tsx
+├── components/         # Static UI components
+├── signals/            # State management
+└── static/             # CSS and assets
 ```
 
-### Voice Processing Pipeline
+## API Endpoints
 
-1. **Browser Recording**: WebRTC → WebM audio
-2. **Server Processing**: WebM → WAV → Whisper → LLM → TTS
-3. **Audio Response**: Base64 encoded audio → Browser playback
+See the [API Reference](../docs/API.md) for detailed endpoint documentation:
 
-## 🛠️ API Endpoints
+- `POST /api/voice` - Process voice input
+- `GET /api/models` - List available models
+- `GET /api/health` - System health check
 
-### POST `/api/voice`
+## Development
 
-Process voice input and return AI response with audio.
-
-**Request:**
-
-```json
-{
-  "audio": "base64_encoded_webm_audio",
-  "model": "mistral-small3.1:latest",
-  "whisperModel": "base",
-  "systemPrompt": "You are a helpful assistant..."
-}
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "transcript": "Hello there",
-  "response": "Hi! How can I help you?",
-  "audioResponse": "base64_encoded_wav_audio"
-}
-```
-
-### GET `/api/health`
-
-Check system dependencies and service status.
-
-### GET `/api/models`
-
-List available Ollama models.
-
-## 🔧 Configuration
-
-### Model Settings
-
-- **LLM Models**: Mistral Small, Llama2 Uncensored
-- **Whisper Models**: base (fast), small (better), medium (best)
-- **System Prompts**: Helpful Assistant, Coding Assistant, Creative Writer, Wise
-  Mentor
-
-### Logging
-
-All voice processing activities are logged to `/tmp/fresh_voice_logs.txt` with
-timestamps and color-coded status messages.
-
-## 🏗️ Development Roadmap
-
-### ✅ Phase 1: Fresh Migration (COMPLETED)
-
-- Fresh framework implementation
-- Component-based architecture
-- API route conversion
-- Feature parity with original
-
-### 🚧 Phase 2: Transformers.js Integration (IN PROGRESS)
-
-- Client-side TTS with browser models
-- Hybrid server/client processing
-- Performance optimization
-
-### 📋 Phase 3: Enhanced Features (PLANNED)
-
-- Offline PWA capabilities
-- Advanced voice customization
-- Cross-browser optimization
-
-## 📈 Performance Metrics
-
-- **First Contentful Paint**: < 1s (Fresh SSR)
-- **Voice Processing**: 2-5s end-to-end
-- **TTS Generation**: 0.8-3s depending on text length
-- **Model Loading**: Instant (server-side models)
-
-## 🔍 Monitoring & Debugging
+### Available Tasks
 
 ```bash
-# Real-time log monitoring
-deno task logs
-
-# Health check with detailed status
-curl -s http://localhost:8001/api/health | jq .
-
-# Manual voice processing test
-curl -X POST http://localhost:8001/api/voice \
-  -H "Content-Type: application/json" \
-  -d '{"audio":"<base64_audio>","model":"mistral-small3.1:latest"}'
+deno task start   # Start dev server with hot reload
+deno task build   # Build for production
+deno task check   # Format, lint, and type check
+deno task logs    # View processing logs
 ```
 
-## 🤝 Contributing
+### Debugging
 
-This application demonstrates modern web development with:
+- Browser console shows detailed debug logs
+- Server logs: `tail -f /tmp/fresh_voice_logs.txt`
+- Test audio system with built-in test buttons
 
-- Fresh framework for optimal performance
-- Islands Architecture for minimal JavaScript
-- Preact Signals for reactive state management
-- TypeScript for type safety
-- Comprehensive error handling and logging
+## Improvements Over Original Web UI
 
-Built with ❤️ using Fresh, Deno, and AI technologies.
+- **Better performance** with server-side rendering
+- **Modular architecture** with components and islands
+- **Type safety** throughout the codebase
+- **Better error handling** and user feedback
+- **Cleaner UI** with modern design patterns
+
+## Configuration
+
+Models and settings can be configured through the UI:
+
+1. **LLM Model**: Select from available Ollama models
+2. **Whisper Model**: Choose STT accuracy vs speed
+3. **System Prompt**: Customize AI personality
+4. **Audio Settings**: Configured automatically
+
+## Contributing
+
+See the main [Development Guide](../docs/DEVELOPMENT.md) for contribution guidelines.

@@ -22,20 +22,33 @@
     }
   },
   "tasks": {
+    // Setup tasks
     "setup": "deno run --allow-all scripts/setup.ts",
-    "setup:stt": "deno run --allow-all scripts/setup.ts stt-all",
-    "setup:tts": "deno run --allow-all scripts/setup.ts tts-all",
     "setup:all": "deno run --allow-all scripts/setup.ts all",
+    
+    // Web interfaces
+    "web": "deno run --allow-all web/server.ts",
+    "fresh": "cd fresh-voice-assistant && deno task start",
+    
+    // Demo tasks
+    "demo:conversation": "deno run --allow-all scripts/demo/conversation.ts",
+    "demo:realtime": "deno run --allow-all scripts/demo/realtime.ts",
     "demo:stt": "deno run --allow-all scripts/demo/stt.ts",
     "demo:tts": "deno run --allow-all scripts/demo/tts.ts",
     "demo:chatterbox": "deno run --allow-all scripts/demo/chatterbox.ts",
-    "demo:conversation": "deno run --allow-all scripts/demo/conversation.ts",
-    "demo:realtime": "deno run --allow-all scripts/demo/realtime.ts",
-    "web": "deno run --allow-all web/server.ts",
+    
+    // Testing
+    "test": "deno test",
     "test:roundtrip": "deno run --allow-all scripts/test/roundtrip.ts",
-    "fmt": "deno fmt scripts/",
-    "lint": "deno lint scripts/",
-    "check": "deno check scripts/**/*.ts"
+    
+    // Development
+    "fmt": "deno fmt",
+    "lint": "deno lint",
+    "check": "deno check scripts/**/*.ts fresh-voice-assistant/**/*.ts",
+    
+    // Utilities
+    "clean": "rm -rf temp_* fresh-voice-assistant/temp_*",
+    "logs": "tail -f /tmp/fresh_voice_logs.txt"
   },
   "imports": {
     "@dax": "https://deno.land/x/dax@0.39.2/mod.ts"
