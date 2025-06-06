@@ -93,6 +93,8 @@ import time
 from chatterbox.tts import ChatterboxTTS
 import torch
 import torchaudio as ta
+import os
+from pathlib import Path
 
 start_time = time.time()
 
@@ -102,7 +104,27 @@ print(f"Using device: {device}")
 
 try:
     print("Loading Chatterbox model...")
-    model = ChatterboxTTS.from_pretrained(device=device)
+    
+    # For CPU, we need to patch torch.load to use map_location
+    if device == "cpu":
+        import functools
+        original_torch_load = torch.load
+        
+        def patched_torch_load(f, *args, **kwargs):
+            # Force map_location to cpu if not specified
+            if 'map_location' not in kwargs:
+                kwargs['map_location'] = 'cpu'
+            return original_torch_load(f, *args, **kwargs)
+        
+        # Temporarily monkey-patch torch.load
+        torch.load = patched_torch_load
+        try:
+            model = ChatterboxTTS.from_pretrained(device=device)
+        finally:
+            # Restore original torch.load
+            torch.load = original_torch_load
+    else:
+        model = ChatterboxTTS.from_pretrained(device=device)
     
     load_time = time.time() - start_time
     print(f"Model loaded in {load_time:.2f}s")
@@ -150,8 +172,14 @@ except Exception as e:
   
   try {
     await Deno.writeTextFile("temp_chatterbox_demo.py", pythonScript);
-    const result = await $`./venv/bin/python temp_chatterbox_demo.py`.text();
-    await $`rm temp_chatterbox_demo.py`;
+    const result = await $`./venv/bin/python temp_chatterbox_demo.py 2>&1`.text();
+    await $`rm temp_chatterbox_demo.py`.noThrow();
+    
+    // Debug: print full output for troubleshooting
+    if (!result.includes('SUCCESS:')) {
+      console.error(`${RED}❌ Python output:${RESET}`);
+      console.error(result);
+    }
     
     // Parse results
     const lines = result.split('\n');
