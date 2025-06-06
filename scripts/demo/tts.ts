@@ -172,7 +172,7 @@ except Exception as e:
 async function playAudio(filePath: string): Promise<void> {
   try {
     console.log(`\n${YELLOW}🔊 Playing audio...${RESET}`);
-    await $`afplay "${filePath}"`;
+    await $`afplay ${filePath}`;
     console.log(`${GREEN}✅ Audio playback complete${RESET}`);
   } catch (error) {
     console.error(`${RED}❌ Failed to play audio: ${error instanceof Error ? error.message : String(error)}${RESET}`);

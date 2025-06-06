@@ -249,7 +249,7 @@ async function runShowcase(outputDir: string): Promise<void> {
       // Auto-play the generated audio
       console.log(`${BOLD}🎧 Playing...${RESET}`);
       try {
-        await $`afplay "${outputPath}"`;
+        await $`afplay ${outputPath}`;
       } catch (error) {
         console.log(`${YELLOW}⚠️ Could not auto-play audio${RESET}`);
       }
@@ -317,7 +317,7 @@ async function runInteractiveMode(outputDir: string): Promise<void> {
       console.log(`${GREEN}✅ Audio generated: ${outputPath}${RESET}`);
       console.log(`${BOLD}🎧 Playing audio...${RESET}`);
       try {
-        await $`afplay "${outputPath}"`;
+        await $`afplay ${outputPath}`;
         console.log(`${GREEN}✅ Audio playback complete${RESET}\n`);
       } catch (error) {
         console.log(`${YELLOW}⚠️ Could not auto-play audio. To play manually:${RESET}`);
@@ -389,7 +389,7 @@ async function runChatterboxDemo(options: ChatterboxOptions = {}): Promise<void>
     
     console.log(`\n${BOLD}🎧 Playing audio...${RESET}`);
     try {
-      await $`afplay "${outputPath}"`;
+      await $`afplay ${outputPath}`;
       console.log(`${GREEN}✅ Audio playback complete${RESET}`);
     } catch (error) {
       console.log(`${YELLOW}⚠️ Could not auto-play audio. To play manually:${RESET}`);
