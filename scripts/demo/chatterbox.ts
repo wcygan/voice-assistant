@@ -245,6 +245,14 @@ async function runShowcase(outputDir: string): Promise<void> {
       console.log(`${GREEN}✅ Generated: ${scenario.filename}${RESET}`);
       const preset = emotionPresets[scenario.emotion];
       console.log(`${CYAN}   ${preset.description}${RESET}`);
+      
+      // Auto-play the generated audio
+      console.log(`${BOLD}🎧 Playing...${RESET}`);
+      try {
+        await $`afplay "${outputPath}"`;
+      } catch (error) {
+        console.log(`${YELLOW}⚠️ Could not auto-play audio${RESET}`);
+      }
     } else {
       console.log(`${RED}❌ Failed: ${scenario.filename}${RESET}`);
     }
@@ -307,7 +315,14 @@ async function runInteractiveMode(outputDir: string): Promise<void> {
     
     if (result.success) {
       console.log(`${GREEN}✅ Audio generated: ${outputPath}${RESET}`);
-      console.log(`${CYAN}💡 Play with: afplay "${outputPath}"${RESET}\n`);
+      console.log(`${BOLD}🎧 Playing audio...${RESET}`);
+      try {
+        await $`afplay "${outputPath}"`;
+        console.log(`${GREEN}✅ Audio playback complete${RESET}\n`);
+      } catch (error) {
+        console.log(`${YELLOW}⚠️ Could not auto-play audio. To play manually:${RESET}`);
+        console.log(`${CYAN}afplay "${outputPath}"${RESET}\n`);
+      }
     } else {
       console.log(`${RED}❌ Generation failed${RESET}\n`);
     }
@@ -372,8 +387,14 @@ async function runChatterboxDemo(options: ChatterboxOptions = {}): Promise<void>
       console.log(`${BOLD}📊 Duration:${RESET} ${result.duration.toFixed(2)}s`);
     }
     
-    console.log(`\n${BOLD}🎧 To play the audio:${RESET}`);
-    console.log(`${CYAN}afplay "${outputPath}"${RESET}`);
+    console.log(`\n${BOLD}🎧 Playing audio...${RESET}`);
+    try {
+      await $`afplay "${outputPath}"`;
+      console.log(`${GREEN}✅ Audio playback complete${RESET}`);
+    } catch (error) {
+      console.log(`${YELLOW}⚠️ Could not auto-play audio. To play manually:${RESET}`);
+      console.log(`${CYAN}afplay "${outputPath}"${RESET}`);
+    }
     
     console.log(`\n${BOLD}🚀 What's Next?${RESET}`);
     console.log(`${CYAN}• Try different emotions: --emotion excited${RESET}`);

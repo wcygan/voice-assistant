@@ -20,6 +20,7 @@ interface DemoOptions {
   outputDir?: string;
   interactive?: boolean;
   showcase?: boolean;
+  play?: boolean;
 }
 
 async function checkDependencies(): Promise<boolean> {
@@ -78,7 +79,7 @@ print(f"\\n📊 Total available models: {len(models.list_models())}")
     await $`./venv/bin/python temp_list_models.py`;
     await $`rm temp_list_models.py`;
   } catch (error) {
-    console.log(`${YELLOW}⚠️ Could not list models: ${error.message}${RESET}`);
+    console.log(`${YELLOW}⚠️ Could not list models: ${error instanceof Error ? error.message : String(error)}${RESET}`);
   }
 }
 
@@ -163,8 +164,19 @@ except Exception as e:
     }
     
   } catch (error) {
-    console.error(`${RED}❌ Speech synthesis failed: ${error.message}${RESET}`);
+    console.error(`${RED}❌ Speech synthesis failed: ${error instanceof Error ? error.message : String(error)}${RESET}`);
     return { success: false };
+  }
+}
+
+async function playAudio(filePath: string): Promise<void> {
+  try {
+    console.log(`\n${YELLOW}🔊 Playing audio...${RESET}`);
+    await $`afplay "${filePath}"`;
+    console.log(`${GREEN}✅ Audio playback complete${RESET}`);
+  } catch (error) {
+    console.error(`${RED}❌ Failed to play audio: ${error instanceof Error ? error.message : String(error)}${RESET}`);
+    console.log(`${CYAN}💡 You can manually play it with: afplay "${filePath}"${RESET}`);
   }
 }
 
@@ -192,7 +204,7 @@ function displayResults(outputPath: string, result: { success: boolean; duration
   console.log(`${CYAN}open "${outputPath}"${RESET}    # macOS (default app)`);
 }
 
-async function runShowcase(outputDir: string): Promise<void> {
+async function runShowcase(outputDir: string, autoPlay: boolean = false): Promise<void> {
   console.log(`${BOLD}${MAGENTA}🎪 TTS Showcase - Multiple Examples${RESET}\n`);
   
   const examples = [
@@ -239,6 +251,11 @@ async function runShowcase(outputDir: string): Promise<void> {
       if (result.rtf) {
         console.log(`${BLUE}   Real-time factor: ${result.rtf.toFixed(2)}x${RESET}`);
       }
+      
+      // Auto-play if requested
+      if (autoPlay) {
+        await playAudio(outputPath);
+      }
     } else {
       console.log(`${RED}❌ Failed: ${example.filename}${RESET}`);
     }
@@ -273,7 +290,15 @@ async function runInteractiveMode(outputDir: string): Promise<void> {
     
     if (result.success) {
       console.log(`${GREEN}✅ Audio generated: ${outputPath}${RESET}`);
-      console.log(`${CYAN}💡 Play with: afplay "${outputPath}"${RESET}\n`);
+      
+      // Ask if user wants to play the audio
+      const playNow = prompt(`${CYAN}Play audio now? (y/n):${RESET} `);
+      if (playNow?.toLowerCase().startsWith('y')) {
+        await playAudio(outputPath);
+      } else {
+        console.log(`${CYAN}💡 Play later with: afplay "${outputPath}"${RESET}`);
+      }
+      console.log();
     } else {
       console.log(`${RED}❌ Generation failed${RESET}\n`);
     }
@@ -289,14 +314,15 @@ async function runTTSDemo(options: DemoOptions = {}): Promise<void> {
     outputFile,
     outputDir = "demo_output",
     interactive = false,
-    showcase = false
+    showcase = false,
+    play = false
   } = options;
   
   // Create output directory
   await $`mkdir -p ${outputDir}`;
   
   if (showcase) {
-    await runShowcase(outputDir);
+    await runShowcase(outputDir, play);
     return;
   }
   
@@ -326,6 +352,11 @@ async function runTTSDemo(options: DemoOptions = {}): Promise<void> {
   displayResults(outputPath, result);
   
   if (result.success) {
+    // Auto-play if requested
+    if (play) {
+      await playAudio(outputPath);
+    }
+    
     console.log(`\n${BOLD}🚀 What's Next?${RESET}`);
     console.log(`${CYAN}• Try different models: --model tts_models/en/ljspeech/glow-tts${RESET}`);
     console.log(`${CYAN}• See the showcase: deno task demo:tts --showcase${RESET}`);
@@ -350,11 +381,15 @@ Options:
   --model <name>     TTS model to use (default: tacotron2-DDC)
   --output <file>    Output audio file path
   --output-dir <dir> Output directory (default: demo_output)
+  --play             Automatically play the generated audio
   --help, -h         Show this help
 
 Examples:
   # Basic synthesis
   deno task demo:tts --text "Hello, this is a TTS demo!"
+  
+  # Synthesize and play automatically
+  deno task demo:tts --text "Hello, world!" --play
   
   # Interactive mode
   deno task demo:tts --interactive
@@ -365,8 +400,8 @@ Examples:
   # Use different model
   deno task demo:tts --text "Testing voice quality" --model tts_models/en/ljspeech/glow-tts
   
-  # Custom output
-  deno task demo:tts --text "Save me here" --output my_speech.wav`);
+  # Custom output with auto-play
+  deno task demo:tts --text "Save me here" --output my_speech.wav --play`);
     return;
   }
   
@@ -395,6 +430,9 @@ Examples:
         break;
       case "--output-dir":
         options.outputDir = args[++i];
+        break;
+      case "--play":
+        options.play = true;
         break;
     }
   }
