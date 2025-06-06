@@ -64,7 +64,10 @@ deno task test:roundtrip
 - **Coqui TTS**: High-quality neural TTS
 - **Piper**: Fast neural synthesis
 - **espeak-ng**: Traditional lightweight TTS
-- **Chatterbox**: Emotion-controlled TTS (GPU required)
+- **Chatterbox**: Emotion-controlled TTS with voice cloning (GPU recommended)
+  - Unique ability to control emotional expression
+  - Voice cloning with reference audio
+  - Neural watermarking for responsible AI
 - **Dia**: Multi-speaker dialogue synthesis (GPU required)
 
 ### LLM (Large Language Models)
@@ -88,6 +91,13 @@ deno task web                          # Browser-based voice assistant
 deno task demo:conversation            # Full AI conversation
 deno task demo:conversation --input question.wav  # Use your audio
 deno task demo:conversation --model llama2-uncensored:7b  # Different AI
+deno task demo:conversation --use-chatterbox  # With emotion control!
+
+# Chatterbox TTS - Emotion Control
+deno task demo:chatterbox --showcase   # See all emotions
+deno task demo:chatterbox --text "Hello!" --emotion happy
+deno task demo:chatterbox --interactive  # Try different emotions
+deno task demo:chatterbox --voice ref.wav  # Voice cloning
 
 # Real-time Voice Assistant
 deno task demo:realtime                # Live microphone input
@@ -138,6 +148,37 @@ deno task check    # Type check
 - **Model Storage**: Models downloaded to user cache directories
 - **Audio Formats**: WAV preferred, auto-conversion supported
 - **Real-time Performance**: STT/TTS optimized for speed, LLM for quality
+
+## Chatterbox Integration
+
+Chatterbox brings emotion-controlled speech synthesis to the voice assistant:
+
+### Features
+- **Emotion Control**: 8 preset emotions (neutral, happy, excited, sad, calm, serious, empathetic, curious)
+- **Voice Cloning**: Clone any voice with a reference audio sample
+- **LLM Integration**: Automatic emotion detection based on response context
+- **Neural Watermarking**: Built-in responsible AI features
+
+### Usage Examples
+```bash
+# Setup Chatterbox
+deno task setup chatterbox
+
+# Demo with emotions
+deno task demo:chatterbox --text "I'm so happy!" --emotion excited
+deno task demo:chatterbox --showcase  # See all emotions
+
+# Voice conversation with emotions
+deno task demo:conversation --use-chatterbox
+
+# Web interface with Chatterbox
+# The web UI automatically detects emotions when Chatterbox is available
+```
+
+### GPU Requirements
+- **Recommended**: NVIDIA GPU with 10-13GB VRAM
+- **Supported**: CPU mode (slower but functional)
+- **Model Size**: ~2GB download on first run
 
 ## Known Issues & Limitations
 

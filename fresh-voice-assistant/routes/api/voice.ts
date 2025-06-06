@@ -14,6 +14,8 @@ interface VoiceRequest {
   whisperModel?: string;
   ttsModel?: string;
   systemPrompt?: string;
+  useChatterbox?: boolean;
+  voiceRef?: string; // base64 encoded voice reference for Chatterbox
 }
 
 interface VoiceResponse {
@@ -22,6 +24,7 @@ interface VoiceResponse {
   response?: string;
   audioResponse?: string; // base64 encoded audio
   error?: string;
+  emotion?: string; // Detected emotion when using Chatterbox
 }
 
 // Logging utility
@@ -61,6 +64,13 @@ async function checkDependencies(): Promise<boolean> {
   if (!ttsCheck) {
     log(`${RED}❌ Coqui TTS not installed.${RESET}`);
     return false;
+  }
+  
+  // Check Chatterbox if needed
+  const chatterboxCheck = await $`../venv/bin/python -c "from chatterbox.tts import ChatterboxTTS; print('OK')"`
+    .noThrow();
+  if (!chatterboxCheck) {
+    log(`${YELLOW}⚠️ Chatterbox TTS not installed. Regular TTS will work.${RESET}`);
   }
 
   // Check Ollama
@@ -184,6 +194,11 @@ async function processVoiceRequest(
     if (systemPrompt) {
       fullPrompt = `${systemPrompt}\\n\\nUser: ${transcript}\\nAssistant:`;
     }
+    
+    // Add emotion detection if using Chatterbox
+    if (request.useChatterbox) {
+      fullPrompt = `${systemPrompt || "You are a helpful assistant."}\\n\\nIMPORTANT: Along with your response, analyze the emotional tone that would be most appropriate for your reply. Choose from: neutral, happy, excited, sad, calm, serious, empathetic, or curious.\\n\\nFormat your response as:\\nEMOTION: [chosen emotion]\\nRESPONSE: [your actual response]\\n\\nUser: ${transcript}\\nAssistant:`;
+    }
 
     const llmResponse = await fetch("http://localhost:11434/api/generate", {
       method: "POST",
@@ -201,7 +216,20 @@ async function processVoiceRequest(
     }
 
     const llmResult = await llmResponse.json();
-    const response = llmResult.response?.trim();
+    let response = llmResult.response?.trim();
+    let detectedEmotion = "neutral";
+    
+    // Parse emotion if using Chatterbox
+    if (request.useChatterbox && response?.includes("EMOTION:") && response.includes("RESPONSE:")) {
+      const emotionMatch = response.match(/EMOTION:\s*(\w+)/);
+      const responseMatch = response.match(/RESPONSE:\s*(.+)/s);
+      
+      detectedEmotion = emotionMatch?.[1]?.toLowerCase() || "neutral";
+      response = responseMatch?.[1]?.trim() || response;
+      
+      log(`${CYAN}🎭 Detected emotion: ${detectedEmotion}${RESET}`);
+    }
+    
     log(`${CYAN}✅ AI Response: "${response}"${RESET}`);
 
     if (!response) {
@@ -209,11 +237,71 @@ async function processVoiceRequest(
     }
 
     // Step 3: Generate speech
-    log(`${YELLOW}🗣️ Generating speech with TTS model: ${ttsModel}${RESET}`);
     const outputPath = `${tempDir}/output.wav`;
     const cleanText = response.replace(/\\n/g, " ").replace(/"/g, '\\\\"');
 
-    const pythonScript = `
+    if (request.useChatterbox) {
+      log(`${YELLOW}🎭 Generating emotional speech with Chatterbox (emotion: ${detectedEmotion})${RESET}`);
+      
+      // Emotion presets
+      const emotionPresets: Record<string, { exaggeration: number; cfgWeight: number }> = {
+        "neutral": { exaggeration: 0.3, cfgWeight: 1.0 },
+        "happy": { exaggeration: 0.7, cfgWeight: 1.2 },
+        "excited": { exaggeration: 0.9, cfgWeight: 1.5 },
+        "sad": { exaggeration: 0.5, cfgWeight: 0.7 },
+        "calm": { exaggeration: 0.1, cfgWeight: 0.8 },
+        "serious": { exaggeration: 0.2, cfgWeight: 1.3 },
+        "empathetic": { exaggeration: 0.4, cfgWeight: 0.9 },
+        "curious": { exaggeration: 0.6, cfgWeight: 1.1 }
+      };
+      
+      const settings = emotionPresets[detectedEmotion] || emotionPresets.neutral;
+      
+      // Handle voice reference if provided
+      let voiceRefPath = "";
+      if (request.voiceRef) {
+        voiceRefPath = `${tempDir}/voice_ref.wav`;
+        const voiceData = Uint8Array.from(atob(request.voiceRef), (c) => c.charCodeAt(0));
+        await Deno.writeFile(voiceRefPath, voiceData);
+      }
+
+      const pythonScript = `
+from chatterbox.tts import ChatterboxTTS
+import torch
+import torchaudio as ta
+
+try:
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Loading Chatterbox on {device}...")
+    model = ChatterboxTTS.from_pretrained(device=device)
+    
+    text_to_speak = "${cleanText}"
+    ${voiceRefPath ? `
+    wav = model.generate(
+        text_to_speak,
+        audio_prompt_path="${voiceRefPath}",
+        exaggeration=${settings.exaggeration},
+        cfg_weight=${settings.cfgWeight}
+    )
+    ` : `
+    wav = model.generate(
+        text_to_speak,
+        exaggeration=${settings.exaggeration},
+        cfg_weight=${settings.cfgWeight}
+    )
+    `}
+    
+    ta.save("${outputPath}", wav, model.sr)
+    print("SUCCESS")
+except Exception as e:
+    print(f"FAILED: {e}")
+`;
+
+      await Deno.writeTextFile(`${tempDir}/tts.py`, pythonScript);
+    } else {
+      log(`${YELLOW}🗣️ Generating speech with TTS model: ${ttsModel}${RESET}`);
+      
+      const pythonScript = `
 from TTS.api import TTS
 import torch
 
@@ -226,7 +314,9 @@ except Exception as e:
     print(f"FAILED: {e}")
 `;
 
-    await Deno.writeTextFile(`${tempDir}/tts.py`, pythonScript);
+      await Deno.writeTextFile(`${tempDir}/tts.py`, pythonScript);
+    }
+
     log(`${CYAN}Running TTS Python script...${RESET}`);
     const ttsOutput = await $`../venv/bin/python ${tempDir}/tts.py`.text()
       .catch(() => "");
@@ -280,6 +370,7 @@ except Exception as e:
       transcript,
       response,
       audioResponse: base64Audio,
+      ...(request.useChatterbox && { emotion: detectedEmotion }),
     };
   } catch (error) {
     const err = error as Error;

@@ -21,9 +21,11 @@ interface ConversationOptions {
   outputDir?: string;
   interactive?: boolean;
   systemPrompt?: string;
+  useChatterbox?: boolean;
+  voiceRef?: string;
 }
 
-async function checkDependencies(): Promise<boolean> {
+async function checkDependencies(useChatterbox: boolean = false): Promise<boolean> {
   console.log(`${YELLOW}🔍 Checking all dependencies...${RESET}`);
   
   // Check virtual environment
@@ -41,12 +43,29 @@ async function checkDependencies(): Promise<boolean> {
     return false;
   }
   
-  // Check Coqui TTS
-  const ttsCheck = await $`./venv/bin/python -c "import TTS; print('OK')"`.noThrow();
-  if (!ttsCheck) {
-    console.error(`${RED}❌ Coqui TTS not installed.${RESET}`);
-    console.log(`${CYAN}💡 Run: deno task setup coqui-tts${RESET}`);
-    return false;
+  // Check TTS based on mode
+  if (useChatterbox) {
+    // Check Chatterbox
+    const chatterboxCheck = await $`./venv/bin/python -c "from chatterbox.tts import ChatterboxTTS; print('OK')"`.noThrow();
+    if (!chatterboxCheck) {
+      console.error(`${RED}❌ Chatterbox TTS not installed.${RESET}`);
+      console.log(`${CYAN}💡 Run: deno task setup chatterbox${RESET}`);
+      return false;
+    }
+    
+    // Check CUDA availability for Chatterbox
+    const cudaCheck = await $`./venv/bin/python -c "import torch; print('CUDA' if torch.cuda.is_available() else 'CPU')"`.text().catch(() => "");
+    if (cudaCheck.includes("CPU")) {
+      console.log(`${YELLOW}⚠️ No GPU detected. Chatterbox will run on CPU (slower).${RESET}`);
+    }
+  } else {
+    // Check Coqui TTS
+    const ttsCheck = await $`./venv/bin/python -c "import TTS; print('OK')"`.noThrow();
+    if (!ttsCheck) {
+      console.error(`${RED}❌ Coqui TTS not installed.${RESET}`);
+      console.log(`${CYAN}💡 Run: deno task setup coqui-tts${RESET}`);
+      return false;
+    }
   }
   
   // Check Ollama
@@ -99,7 +118,7 @@ async function transcribeAudio(audioPath: string, model: string = "base"): Promi
   }
 }
 
-async function queryLLM(text: string, model: string = "mistral", systemPrompt?: string): Promise<string | null> {
+async function queryLLM(text: string, model: string = "mistral", systemPrompt?: string, detectEmotion: boolean = false): Promise<{ response: string | null; emotion?: string }> {
   console.log(`${YELLOW}🧠 Thinking with ${model}...${RESET}`);
   
   try {
@@ -107,6 +126,11 @@ async function queryLLM(text: string, model: string = "mistral", systemPrompt?: 
     let fullPrompt = text;
     if (systemPrompt) {
       fullPrompt = `${systemPrompt}\n\nUser: ${text}\nAssistant:`;
+    }
+    
+    // Add emotion detection if using Chatterbox
+    if (detectEmotion) {
+      fullPrompt = `${systemPrompt || "You are a helpful assistant."}\n\nIMPORTANT: Along with your response, analyze the emotional tone that would be most appropriate for your reply. Choose from: neutral, happy, excited, sad, calm, serious, empathetic, or curious.\n\nFormat your response as:\nEMOTION: [chosen emotion]\nRESPONSE: [your actual response]\n\nUser: ${text}\nAssistant:`;
     }
     
     const requestBody = {
@@ -128,11 +152,25 @@ async function queryLLM(text: string, model: string = "mistral", systemPrompt?: 
     }
     
     const result = await response.json();
-    return result.response?.trim() || null;
+    const fullResponse = result.response?.trim() || "";
+    
+    // Parse emotion if detected
+    if (detectEmotion && fullResponse.includes("EMOTION:") && fullResponse.includes("RESPONSE:")) {
+      const emotionMatch = fullResponse.match(/EMOTION:\s*(\w+)/);
+      const responseMatch = fullResponse.match(/RESPONSE:\s*(.+)/s);
+      
+      const emotion = emotionMatch?.[1]?.toLowerCase() || "neutral";
+      const response = responseMatch?.[1]?.trim() || fullResponse;
+      
+      console.log(`${CYAN}🎭 Detected emotion: ${emotion}${RESET}`);
+      return { response, emotion };
+    }
+    
+    return { response: fullResponse };
     
   } catch (error) {
     console.error(`${RED}❌ LLM query failed: ${error.message}${RESET}`);
-    return null;
+    return { response: null };
   }
 }
 
@@ -164,6 +202,71 @@ except Exception as e:
     return result.includes("SUCCESS");
   } catch (error) {
     console.error(`${RED}❌ Speech synthesis failed: ${error.message}${RESET}`);
+    return false;
+  }
+}
+
+async function synthesizeWithChatterbox(text: string, outputPath: string, emotion: string = "neutral", voiceRef?: string): Promise<boolean> {
+  console.log(`${YELLOW}🎭 Generating emotional speech response with Chatterbox...${RESET}`);
+  console.log(`${CYAN}Emotion: ${emotion}${RESET}`);
+  
+  const cleanText = text.replace(/\n/g, ' ').replace(/"/g, '\\"');
+  
+  // Emotion presets
+  const emotionPresets: Record<string, { exaggeration: number; cfgWeight: number }> = {
+    "neutral": { exaggeration: 0.3, cfgWeight: 1.0 },
+    "happy": { exaggeration: 0.7, cfgWeight: 1.2 },
+    "excited": { exaggeration: 0.9, cfgWeight: 1.5 },
+    "sad": { exaggeration: 0.5, cfgWeight: 0.7 },
+    "calm": { exaggeration: 0.1, cfgWeight: 0.8 },
+    "serious": { exaggeration: 0.2, cfgWeight: 1.3 },
+    "empathetic": { exaggeration: 0.4, cfgWeight: 0.9 },
+    "curious": { exaggeration: 0.6, cfgWeight: 1.1 }
+  };
+  
+  const settings = emotionPresets[emotion] || emotionPresets.neutral;
+  
+  const pythonScript = `
+from chatterbox.tts import ChatterboxTTS
+import torch
+import torchaudio as ta
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+try:
+    print(f"Loading Chatterbox on {device}...")
+    model = ChatterboxTTS.from_pretrained(device=device)
+    
+    text_to_speak = "${cleanText}"
+    ${voiceRef ? `
+    wav = model.generate(
+        text_to_speak,
+        audio_prompt_path="${voiceRef}",
+        exaggeration=${settings.exaggeration},
+        cfg_weight=${settings.cfgWeight}
+    )
+    ` : `
+    wav = model.generate(
+        text_to_speak,
+        exaggeration=${settings.exaggeration},
+        cfg_weight=${settings.cfgWeight}
+    )
+    `}
+    
+    ta.save("${outputPath}", wav, model.sr)
+    print("SUCCESS")
+except Exception as e:
+    print(f"FAILED: {e}")
+`;
+  
+  try {
+    await Deno.writeTextFile("temp_chatterbox_tts.py", pythonScript);
+    const result = await $`./venv/bin/python temp_chatterbox_tts.py`.text();
+    await $`rm temp_chatterbox_tts.py`;
+    
+    return result.includes("SUCCESS");
+  } catch (error) {
+    console.error(`${RED}❌ Chatterbox synthesis failed: ${error.message}${RESET}`);
     return false;
   }
 }
@@ -261,20 +364,28 @@ async function runConversation(options: ConversationOptions = {}): Promise<void>
   
   // Step 2: LLM Processing
   console.log(`${BOLD}Step 2: AI Thinking${RESET}`);
-  const response = await queryLLM(transcription, model, systemPrompt);
+  const llmResult = await queryLLM(transcription, model, systemPrompt, options.useChatterbox);
   
-  if (!response) {
+  if (!llmResult.response) {
     console.error(`${RED}❌ Conversation failed at LLM processing${RESET}`);
     return;
   }
   
-  console.log(`${GREEN}✅ AI response: "${response}"${RESET}\n`);
+  console.log(`${GREEN}✅ AI response: "${llmResult.response}"${RESET}\n`);
   
   // Step 3: Text to Speech
   console.log(`${BOLD}Step 3: Speech Synthesis${RESET}`);
   const responseAudio = `${outputDir}/ai_response.wav`;
   
-  if (!await synthesizeSpeech(response, responseAudio, ttsModel)) {
+  let synthesisSuccess: boolean;
+  if (options.useChatterbox) {
+    const emotion = llmResult.emotion || "neutral";
+    synthesisSuccess = await synthesizeWithChatterbox(llmResult.response, responseAudio, emotion, options.voiceRef);
+  } else {
+    synthesisSuccess = await synthesizeSpeech(llmResult.response, responseAudio, ttsModel);
+  }
+  
+  if (!synthesisSuccess) {
     console.error(`${RED}❌ Conversation failed at speech synthesis${RESET}`);
     return;
   }
@@ -286,7 +397,11 @@ async function runConversation(options: ConversationOptions = {}): Promise<void>
   
   console.log(`${BOLD}💬 Conversation Summary:${RESET}`);
   console.log(`${BLUE}👤 User:${RESET} "${transcription}"`);
-  console.log(`${CYAN}🤖 Assistant:${RESET} "${response}"\n`);
+  console.log(`${CYAN}🤖 Assistant:${RESET} "${llmResult.response}"`);
+  if (options.useChatterbox && llmResult.emotion) {
+    console.log(`${MAGENTA}🎭 Emotion:${RESET} ${llmResult.emotion}`);
+  }
+  console.log();
   
   console.log(`${BOLD}📁 Files Generated:${RESET}`);
   if (!inputAudio) {
@@ -330,6 +445,8 @@ Options:
   --model <name>        LLM model to use (default: mistral)
   --whisper <model>     Whisper model: tiny, base, small, medium, large
   --tts <model>         TTS model name
+  --use-chatterbox      Enable Chatterbox TTS with emotion control
+  --voice <file>        Voice reference file for Chatterbox cloning
   --system-prompt <text> Custom system prompt for the AI
   --output-dir <dir>    Output directory (default: conversation_output)
   --interactive         Enable interactive mode suggestions
@@ -342,6 +459,12 @@ Examples:
   # Use your own question
   deno task demo:conversation --input "my_question.wav"
   
+  # With Chatterbox emotion control
+  deno task demo:conversation --use-chatterbox
+  
+  # Chatterbox with voice cloning
+  deno task demo:conversation --use-chatterbox --voice reference.wav
+  
   # Different LLM model
   deno task demo:conversation --model "llama2-uncensored:7b"
   
@@ -352,20 +475,6 @@ Examples:
   deno task demo:conversation --whisper large --input interview_question.wav`);
     return;
   }
-  
-  if (!await checkDependencies()) {
-    Deno.exit(1);
-  }
-  
-  // Show available models
-  console.log(`${BLUE}🤖 Available LLM models:${RESET}`);
-  const models = await getAvailableModels();
-  if (models.length > 0) {
-    models.forEach(model => console.log(`   • ${model}`));
-  } else {
-    console.log("   • No models found. Run: ollama pull mistral");
-  }
-  console.log();
   
   const options: ConversationOptions = {};
   
@@ -392,8 +501,28 @@ Examples:
       case "--interactive":
         options.interactive = true;
         break;
+      case "--use-chatterbox":
+        options.useChatterbox = true;
+        break;
+      case "--voice":
+        options.voiceRef = args[++i];
+        break;
     }
   }
+  
+  if (!await checkDependencies(options.useChatterbox)) {
+    Deno.exit(1);
+  }
+  
+  // Show available models
+  console.log(`${BLUE}🤖 Available LLM models:${RESET}`);
+  const models = await getAvailableModels();
+  if (models.length > 0) {
+    models.forEach(model => console.log(`   • ${model}`));
+  } else {
+    console.log("   • No models found. Run: ollama pull mistral");
+  }
+  console.log();
   
   await runConversation(options);
 }
